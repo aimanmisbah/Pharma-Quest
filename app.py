@@ -1,10 +1,12 @@
-import os
 import streamlit as st
+from google import genai
+from supabase import create_client
+import random
 
 
-# ============================================================
-# PAGE SETTINGS
-# ============================================================
+# =========================================================
+# PAGE CONFIG
+# =========================================================
 
 st.set_page_config(
     page_title="PharmaQuest",
@@ -14,1273 +16,579 @@ st.set_page_config(
 )
 
 
-# ============================================================
-# INITIAL STUDENT STATE
-# ============================================================
+# =========================================================
+# SESSION STATE
+# =========================================================
 
-if "xp" not in st.session_state:
-    st.session_state.xp = 0
+defaults = {
+    "user": None,
+    "profile": None,
+    "page": "Home",
+    "login_mode": "login",
+}
 
-if "level" not in st.session_state:
-    st.session_state.level = 1
-
-if "streak" not in st.session_state:
-    st.session_state.streak = 0
-
-if "badges" not in st.session_state:
-    st.session_state.badges = 0
-
-if "missions_completed" not in st.session_state:
-    st.session_state.missions_completed = 0
-
-if "selected_page" not in st.session_state:
-    st.session_state.selected_page = "🏠 Home"
+for key, value in defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
 
 
-# ============================================================
-# GEMINI CONNECTION
-# ============================================================
+# =========================================================
+# SUPABASE
+# =========================================================
 
-def get_gemini_client():
+def get_supabase():
 
-    try:
+    url = st.secrets.get("SUPABASE_URL")
+    key = st.secrets.get("SUPABASE_KEY")
 
-        api_key = st.secrets.get("GEMINI_API_KEY")
-
-        if not api_key:
-            api_key = os.environ.get("GEMINI_API_KEY")
-
-        if not api_key:
-            return None
-
-        from google import genai
-
-        return genai.Client(api_key=api_key)
-
-    except Exception:
-
+    if not url or not key:
         return None
 
+    return create_client(url, key)
 
-# ============================================================
-# XP / LEVEL SYSTEM
-# ============================================================
+
+supabase = get_supabase()
+
+
+# =========================================================
+# GEMINI
+# =========================================================
+
+def get_gemini():
+
+    api_key = st.secrets.get("GEMINI_API_KEY")
+
+    if not api_key:
+        return None
+
+    return genai.Client(api_key=api_key)
+
+
+# =========================================================
+# LEVEL SYSTEM
+# =========================================================
 
 def get_level_info(xp):
 
-    levels = [
-        (1, "Pharma Initiate", 0, 100),
-        (2, "Drug Seeker", 100, 250),
-        (3, "Pharma Strategist", 250, 500),
-        (4, "Clinical Specialist", 500, 850),
-        (5, "Therapeutics Master", 850, 1300),
-        (6, "PharmaQuest Elite", 1300, 2000),
-    ]
+    if xp < 500:
+        return 1, "🧬 Pharma Initiate", 500
 
-    current = levels[0]
+    elif xp < 1200:
+        return 2, "🔎 Drug Seeker", 1200
 
-    for level in levels:
+    elif xp < 2500:
+        return 3, "⚗️ Pharma Strategist", 2500
 
-        if xp >= level[2]:
-            current = level
+    elif xp < 4500:
+        return 4, "🩺 Clinical Specialist", 4500
 
-    return current
+    elif xp < 7000:
+        return 5, "🧠 Therapeutics Master", 7000
+
+    else:
+        return 6, "🏆 PharmaQuest Elite", 10000
 
 
-level_number, level_name, level_start, level_end = get_level_info(
-    st.session_state.xp
-)
+# =========================================================
+# LOAD PROFILE
+# =========================================================
 
-if level_end > level_start:
+def load_profile():
 
-    progress_percent = int(
-        (
-            (st.session_state.xp - level_start)
-            / (level_end - level_start)
-        ) * 100
+    if not supabase or not st.session_state.user:
+        return None
+
+    user_id = st.session_state.user.id
+
+    result = (
+        supabase
+        .table("profiles")
+        .select("*")
+        .eq("id", user_id)
+        .execute()
     )
 
-else:
+    if result.data:
+        return result.data[0]
 
-    progress_percent = 0
-
-progress_percent = max(
-    0,
-    min(100, progress_percent)
-)
-
-xp_to_next = max(
-    0,
-    level_end - st.session_state.xp
-)
+    return None
 
 
-# ============================================================
-# CUSTOM DESIGN
-# ============================================================
+# =========================================================
+# CREATE PROFILE
+# =========================================================
+
+def create_profile(user, username):
+
+    if not supabase:
+        return None
+
+    data = {
+        "id": user.id,
+        "username": username,
+        "xp": 0,
+        "level": 1,
+        "streak": 0,
+        "badges": 0,
+        "missions_completed": 0,
+    }
+
+    result = (
+        supabase
+        .table("profiles")
+        .insert(data)
+        .execute()
+    )
+
+    if result.data:
+        return result.data[0]
+
+    return None
+
+
+# =========================================================
+# SAVE PROGRESS
+# =========================================================
+
+def save_progress(xp_add=0, mission_complete=False):
+
+    if not supabase or not st.session_state.user:
+        return
+
+    profile = st.session_state.profile
+
+    if not profile:
+        return
+
+    new_xp = profile.get("xp", 0) + xp_add
+
+    missions = profile.get("missions_completed", 0)
+
+    if mission_complete:
+        missions += 1
+
+    level, title, _ = get_level_info(new_xp)
+
+    update_data = {
+        "xp": new_xp,
+        "level": level,
+        "missions_completed": missions,
+    }
+
+    result = (
+        supabase
+        .table("profiles")
+        .update(update_data)
+        .eq("id", st.session_state.user.id)
+        .execute()
+    )
+
+    if result.data:
+        st.session_state.profile = result.data[0]
+
+
+# =========================================================
+# LOGOUT
+# =========================================================
+
+def logout():
+
+    if supabase:
+        try:
+            supabase.auth.sign_out()
+        except:
+            pass
+
+    st.session_state.user = None
+    st.session_state.profile = None
+    st.session_state.page = "Home"
+
+    st.rerun()
+
+
+# =========================================================
+# GLOBAL CSS
+# =========================================================
 
 st.markdown(
     """
     <style>
 
-    /* ========================================================
+    /* -------------------------------------------------
        GLOBAL
-       ======================================================== */
+    ------------------------------------------------- */
 
     .stApp {
-
         background:
-            radial-gradient(
-                circle at 8% 8%,
-                rgba(124,58,237,0.16),
-                transparent 25%
-            ),
-            radial-gradient(
-                circle at 92% 12%,
-                rgba(6,182,212,0.12),
-                transparent 24%
-            ),
-            radial-gradient(
-                circle at 50% 100%,
-                rgba(236,72,153,0.10),
-                transparent 28%
-            ),
-            #0b1020;
-
-        color: #f8fafc;
+            radial-gradient(circle at 10% 10%, rgba(255, 101, 132, 0.12), transparent 25%),
+            radial-gradient(circle at 90% 10%, rgba(0, 214, 201, 0.12), transparent 25%),
+            radial-gradient(circle at 50% 90%, rgba(255, 180, 0, 0.10), transparent 30%),
+            #f7f8fc;
     }
 
     .block-container {
-
-        max-width: 1500px;
-
-        padding-top: 1.5rem;
-
+        max-width: 1450px;
+        padding-top: 2rem;
         padding-bottom: 4rem;
     }
 
-    #MainMenu {
-        visibility: hidden;
+
+    /* -------------------------------------------------
+       REMOVE DEFAULT STREAMLIT TOP SPACE
+    ------------------------------------------------- */
+
+    header[data-testid="stHeader"] {
+        background: transparent;
     }
 
-    footer {
-        visibility: hidden;
-    }
 
-
-    /* ========================================================
+    /* -------------------------------------------------
        SIDEBAR
-       ======================================================== */
+    ------------------------------------------------- */
 
     section[data-testid="stSidebar"] {
-
         background:
             linear-gradient(
                 180deg,
-                #11152a 0%,
-                #15102a 50%,
-                #0d1c27 100%
+                #fff7fb 0%,
+                #f5f1ff 45%,
+                #effffc 100%
             );
 
-        border-right:
-            1px solid rgba(255,255,255,0.08);
+        border-right: 1px solid rgba(100, 80, 150, 0.12);
     }
 
-    section[data-testid="stSidebar"] * {
-        color: #f8fafc;
+    section[data-testid="stSidebar"] > div {
+        padding-top: 1.5rem;
     }
 
-    .sidebar-brand {
 
-        padding:
-            8px 5px 18px 5px;
+    /* -------------------------------------------------
+       SIDEBAR BUTTONS
+    ------------------------------------------------- */
+
+    section[data-testid="stSidebar"] .stButton button {
+        width: 100%;
+        border: none;
+        border-radius: 14px;
+        padding: 0.7rem 0.8rem;
+        background: transparent;
+        color: #27243a;
+        text-align: left;
+        font-weight: 600;
+        transition: all 0.2s ease;
     }
 
-    .brand-row {
-
-        display: flex;
-
-        align-items: center;
-
-        gap: 13px;
+    section[data-testid="stSidebar"] .stButton button:hover {
+        background: rgba(139, 92, 246, 0.12);
+        transform: translateX(3px);
     }
 
-    .sidebar-logo {
 
-        width: 54px;
-        height: 54px;
+    /* -------------------------------------------------
+       LOGIN
+    ------------------------------------------------- */
 
-        display: flex;
-
-        align-items: center;
-        justify-content: center;
-
-        border-radius: 17px;
-
-        background:
-            linear-gradient(
-                135deg,
-                #7c3aed,
-                #ec4899,
-                #f97316
-            );
-
-        box-shadow:
-            0 12px 30px
-            rgba(236,72,153,0.30);
-
-        font-size: 27px;
+    .login-shell {
+        max-width: 1050px;
+        margin: 4rem auto;
     }
 
-    .sidebar-title {
-
-        color: #ffffff;
-
-        font-size: 20px;
-
-        font-weight: 950;
-
-        letter-spacing: -0.5px;
+    .login-brand {
+        text-align: center;
+        margin-bottom: 1.8rem;
     }
 
-    .sidebar-subtitle {
+    .login-brand-icon {
+        font-size: 4rem;
+    }
 
-        margin-top: 3px;
-
-        color: #94a3b8;
-
-        font-size: 8px;
-
+    .login-brand-title {
+        font-size: 3rem;
         font-weight: 900;
-
-        letter-spacing: 1.3px;
+        background: linear-gradient(
+            90deg,
+            #7c3aed,
+            #ec4899,
+            #f97316
+        );
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
     }
 
-    .sidebar-section {
-
-        margin-top: 17px;
-
-        margin-bottom: 7px;
-
-        color: #fbbf24;
-
-        font-size: 9px;
-
-        font-weight: 950;
-
-        letter-spacing: 1.5px;
+    .login-brand-subtitle {
+        color: #666579;
+        font-size: 1.05rem;
     }
 
-    .sidebar-section.play {
-        color: #c084fc;
-    }
-
-    .sidebar-section.learn {
-        color: #34d399;
-    }
-
-    .sidebar-section.account {
-        color: #f472b6;
-    }
-
-    section[data-testid="stSidebar"] .stRadio label {
-
-        color: #cbd5e1 !important;
-
-        font-size: 11px !important;
-
-        font-weight: 700 !important;
-    }
-
-    section[data-testid="stSidebar"] .stRadio label:hover {
-
-        color: white !important;
-    }
-
-    .sidebar-footer-card {
-
-        margin-top: 18px;
-
-        padding: 17px;
-
-        border-radius: 20px;
-
-        background:
-            linear-gradient(
-                135deg,
-                rgba(124,58,237,0.20),
-                rgba(236,72,153,0.12)
-            );
-
-        border:
-            1px solid
-            rgba(255,255,255,0.10);
-
-        box-shadow:
-            0 15px 35px
-            rgba(0,0,0,0.20);
-    }
-
-    .footer-label {
-
-        color: #94a3b8;
-
-        font-size: 8px;
-
-        font-weight: 900;
-
-        letter-spacing: 1px;
-    }
-
-    .footer-rank {
-
-        margin-top: 5px;
-
-        color: #c084fc;
-
-        font-size: 15px;
-
-        font-weight: 950;
-    }
-
-
-    /* ========================================================
-       TOP BAR
-       ======================================================== */
-
-    .topbar {
-
-        margin-bottom: 20px;
-    }
-
-    .eyebrow {
-
-        color: #a78bfa;
-
-        font-size: 9px;
-
-        font-weight: 950;
-
-        letter-spacing: 1.8px;
-    }
-
-    .top-title {
-
-        margin-top: 5px;
-
-        color: #ffffff;
-
-        font-size: 31px;
-
-        font-weight: 950;
-
-        letter-spacing: -1.2px;
-    }
-
-    .top-subtitle {
-
-        margin-top: 4px;
-
-        color: #94a3b8;
-
-        font-size: 12px;
-    }
-
-
-    /* ========================================================
-       WELCOME HERO
-       ======================================================== */
-
-    .welcome-card {
-
-        position: relative;
-
-        overflow: hidden;
-
-        padding: 36px;
-
+    .login-panel {
+        background: rgba(255,255,255,0.92);
+        border: 1px solid rgba(100,80,150,0.12);
         border-radius: 30px;
+        padding: 2.5rem;
+        box-shadow: 0 25px 70px rgba(50,30,90,0.12);
+    }
 
+
+    /* -------------------------------------------------
+       HOME HERO
+    ------------------------------------------------- */
+
+    .home-hero {
+        position: relative;
+        overflow: hidden;
+        border-radius: 28px;
+        padding: 2.4rem;
         background:
-            radial-gradient(
-                circle at 88% 15%,
-                rgba(251,191,36,0.35),
-                transparent 20%
-            ),
-            radial-gradient(
-                circle at 15% 100%,
-                rgba(6,182,212,0.30),
-                transparent 25%
-            ),
             linear-gradient(
-                135deg,
-                #312e81,
-                #7c3aed 45%,
-                #db2777 78%,
+                120deg,
+                #7c3aed,
+                #db2777 50%,
                 #f97316
             );
-
-        border:
-            1px solid
-            rgba(255,255,255,0.14);
-
-        box-shadow:
-            0 30px 70px
-            rgba(124,58,237,0.30);
-    }
-
-    .welcome-card::after {
-
-        content: "";
-
-        position: absolute;
-
-        width: 220px;
-        height: 220px;
-
-        right: -70px;
-        bottom: -90px;
-
-        border-radius: 50%;
-
-        background:
-            rgba(255,255,255,0.08);
-    }
-
-    .welcome-label {
-
-        display: inline-block;
-
-        padding: 7px 12px;
-
-        border-radius: 999px;
-
-        background:
-            rgba(255,255,255,0.14);
-
-        border:
-            1px solid
-            rgba(255,255,255,0.20);
-
-        color: #fde68a;
-
-        font-size: 8px;
-
-        font-weight: 950;
-
-        letter-spacing: 1.5px;
-    }
-
-    .welcome-title {
-
-        margin-top: 15px;
-
         color: white;
-
-        font-size: 38px;
-
-        line-height: 1.1;
-
-        font-weight: 950;
-
-        letter-spacing: -1.5px;
+        box-shadow: 0 18px 50px rgba(124,58,237,0.22);
     }
 
-    .welcome-text {
-
-        max-width: 700px;
-
-        margin-top: 10px;
-
-        color: #f5f3ff;
-
-        font-size: 13px;
-
-        line-height: 1.65;
+    .home-hero h1 {
+        font-size: 2.6rem;
+        margin-bottom: 0.4rem;
+        font-weight: 900;
     }
 
-    .welcome-pill {
-
-        display: inline-block;
-
-        margin-top: 20px;
-
-        padding: 10px 15px;
-
-        border-radius: 13px;
-
-        background:
-            rgba(0,0,0,0.16);
-
-        border:
-            1px solid
-            rgba(255,255,255,0.13);
-
-        color: white;
-
-        font-size: 10px;
-
-        font-weight: 850;
+    .home-hero p {
+        font-size: 1.05rem;
+        opacity: 0.94;
     }
 
 
-    /* ========================================================
+    /* -------------------------------------------------
        STAT CARDS
-       ======================================================== */
+    ------------------------------------------------- */
 
-    .stats-area {
-
-        margin-top: 20px;
+    .stat-card {
+        padding: 1.2rem;
+        border-radius: 20px;
+        background: white;
+        border: 1px solid rgba(80,70,120,0.10);
+        box-shadow: 0 10px 30px rgba(60,40,100,0.07);
     }
 
-    .mini-card {
-
-        min-height: 125px;
-
-        padding: 20px;
-
-        border-radius: 21px;
-
-        background:
-            linear-gradient(
-                145deg,
-                #151b32,
-                #101628
-            );
-
-        border:
-            1px solid
-            rgba(255,255,255,0.08);
-
-        box-shadow:
-            0 15px 35px
-            rgba(0,0,0,0.18);
-
-        transition:
-            transform 0.25s ease,
-            box-shadow 0.25s ease;
+    .stat-icon {
+        font-size: 1.6rem;
     }
 
-    .mini-card:hover {
-
-        transform: translateY(-5px);
-
-        box-shadow:
-            0 22px 45px
-            rgba(0,0,0,0.28);
+    .stat-number {
+        font-size: 1.65rem;
+        font-weight: 900;
+        color: #252238;
     }
 
-    .mini-icon {
-
-        font-size: 25px;
-    }
-
-    .mini-number {
-
-        margin-top: 5px;
-
-        color: #ffffff;
-
-        font-size: 26px;
-
-        font-weight: 950;
-    }
-
-    .mini-label {
-
-        color: #cbd5e1;
-
-        font-size: 8px;
-
-        font-weight: 950;
-
-        letter-spacing: 1px;
-    }
-
-    .mini-description {
-
-        margin-top: 4px;
-
-        color: #64748b;
-
-        font-size: 9px;
+    .stat-label {
+        color: #777389;
+        font-size: 0.85rem;
     }
 
 
-    /* ========================================================
-       LEVEL CARD
-       ======================================================== */
+    /* -------------------------------------------------
+       SECTION TITLES
+    ------------------------------------------------- */
 
-    .level-card {
-
-        margin-top: 20px;
-
-        padding: 23px;
-
-        border-radius: 23px;
-
-        background:
-            linear-gradient(
-                145deg,
-                #161d36,
-                #11172a
-            );
-
-        border:
-            1px solid
-            rgba(255,255,255,0.08);
-
-        box-shadow:
-            0 15px 35px
-            rgba(0,0,0,0.18);
+    .section-title {
+        font-size: 1.9rem;
+        font-weight: 900;
+        color: #27233b;
+        margin-top: 2rem;
+        margin-bottom: 0.3rem;
     }
 
-    .level-top {
-
-        display: flex;
-
-        justify-content: space-between;
-
-        align-items: center;
+    .section-subtitle {
+        color: #777389;
+        margin-bottom: 1.2rem;
     }
 
-    .level-badge {
 
-        display: flex;
+    /* -------------------------------------------------
+       GAME BUTTON CARDS
+    ------------------------------------------------- */
 
-        align-items: center;
-        justify-content: center;
+    div.st-key-card_drug button,
+    div.st-key-card_case button,
+    div.st-key-card_patient button,
+    div.st-key-card_battle button,
+    div.st-key-card_escape button,
+    div.st-key-card_build button,
+    div.st-key-card_quiz button,
+    div.st-key-card_daily button {
 
-        width: 57px;
-        height: 57px;
-
-        border-radius: 18px;
-
-        background:
-            linear-gradient(
-                135deg,
-                #f59e0b,
-                #ef4444
-            );
-
-        color: white;
-
-        font-size: 16px;
-
-        font-weight: 950;
-
-        box-shadow:
-            0 12px 25px
-            rgba(249,115,22,0.25);
-    }
-
-    .level-title {
-
-        flex: 1;
-
-        margin-left: 15px;
-    }
-
-    .level-small {
-
-        color: #64748b;
-
-        font-size: 8px;
-
-        font-weight: 950;
-
-        letter-spacing: 1px;
-    }
-
-    .level-name {
-
-        margin-top: 3px;
-
-        color: #ffffff;
-
-        font-size: 18px;
-
-        font-weight: 950;
-    }
-
-    .level-xp {
-
-        color: #c084fc;
-
-        font-size: 11px;
-
-        font-weight: 950;
-    }
-
-    .level-track {
-
-        margin-top: 17px;
-
+        height: 230px;
         width: 100%;
 
-        height: 10px;
+        border: none !important;
+        border-radius: 27px !important;
 
-        overflow: hidden;
+        color: white !important;
 
-        border-radius: 999px;
+        text-align: left !important;
 
-        background: #1e293b;
+        white-space: pre-wrap !important;
+
+        padding: 1.5rem !important;
+
+        font-size: 1.08rem !important;
+
+        font-weight: 700 !important;
+
+        box-shadow:
+            0 16px 35px rgba(50,40,100,0.15);
+
+        transition:
+            transform 0.22s ease,
+            box-shadow 0.22s ease;
+
+        margin-bottom: 1rem;
     }
 
-    .level-fill {
 
+    div.st-key-card_drug button {
+        background: linear-gradient(135deg,#7c3aed,#ec4899) !important;
+    }
+
+    div.st-key-card_case button {
+        background: linear-gradient(135deg,#0891b2,#2563eb) !important;
+    }
+
+    div.st-key-card_patient button {
+        background: linear-gradient(135deg,#db2777,#9333ea) !important;
+    }
+
+    div.st-key-card_battle button {
+        background: linear-gradient(135deg,#f97316,#ef4444) !important;
+    }
+
+    div.st-key-card_escape button {
+        background: linear-gradient(135deg,#4f46e5,#7c3aed) !important;
+    }
+
+    div.st-key-card_build button {
+        background: linear-gradient(135deg,#059669,#0d9488) !important;
+    }
+
+    div.st-key-card_quiz button {
+        background: linear-gradient(135deg,#f59e0b,#f97316) !important;
+    }
+
+    div.st-key-card_daily button {
+        background: linear-gradient(135deg,#e11d48,#f43f5e) !important;
+    }
+
+
+    div.st-key-card_drug button:hover,
+    div.st-key-card_case button:hover,
+    div.st-key-card_patient button:hover,
+    div.st-key-card_battle button:hover,
+    div.st-key-card_escape button:hover,
+    div.st-key-card_build button:hover,
+    div.st-key-card_quiz button:hover,
+    div.st-key-card_daily button:hover {
+
+        transform: translateY(-7px) scale(1.015);
+
+        box-shadow:
+            0 22px 45px rgba(50,40,100,0.22);
+    }
+
+
+    /* -------------------------------------------------
+       PROGRESS
+    ------------------------------------------------- */
+
+    .progress-panel {
+        margin-top: 1.2rem;
+        padding: 1.5rem;
+        background: white;
+        border-radius: 22px;
+        border: 1px solid rgba(80,70,120,0.10);
+        box-shadow: 0 10px 30px rgba(60,40,100,0.06);
+    }
+
+    .progress-bar {
+        height: 13px;
+        border-radius: 20px;
+        background: #ece9f5;
+        overflow: hidden;
+        margin-top: 0.7rem;
+    }
+
+    .progress-fill {
         height: 100%;
-
-        border-radius: 999px;
-
+        border-radius: 20px;
         background:
             linear-gradient(
                 90deg,
                 #7c3aed,
                 #ec4899,
-                #f59e0b
-            );
-
-        box-shadow:
-            0 0 14px
-            rgba(236,72,153,0.45);
-    }
-
-    .level-bottom {
-
-        display: flex;
-
-        justify-content: space-between;
-
-        margin-top: 7px;
-
-        color: #64748b;
-
-        font-size: 9px;
-    }
-
-
-    /* ========================================================
-       SECTION HEADINGS
-       ======================================================== */
-
-    .section-heading {
-
-        margin-top: 35px;
-
-        margin-bottom: 5px;
-
-        color: #ffffff;
-
-        font-size: 25px;
-
-        font-weight: 950;
-
-        letter-spacing: -0.6px;
-    }
-
-    .section-caption {
-
-        margin-bottom: 17px;
-
-        color: #94a3b8;
-
-        font-size: 11px;
-    }
-
-
-    /* ========================================================
-       MISSION CARDS
-       ======================================================== */
-
-    .mission-card {
-
-        position: relative;
-
-        min-height: 215px;
-
-        padding: 22px;
-
-        margin-bottom: 4px;
-
-        border-radius: 24px;
-
-        overflow: hidden;
-
-        color: white;
-
-        border:
-            1px solid
-            rgba(255,255,255,0.12);
-
-        box-shadow:
-            0 18px 38px
-            rgba(0,0,0,0.22);
-
-        transition:
-            transform 0.25s ease,
-            box-shadow 0.25s ease;
-    }
-
-    .mission-card::after {
-
-        content: "";
-
-        position: absolute;
-
-        width: 130px;
-        height: 130px;
-
-        right: -45px;
-        bottom: -55px;
-
-        border-radius: 50%;
-
-        background:
-            rgba(255,255,255,0.10);
-    }
-
-    .mission-card:hover {
-
-        transform: translateY(-7px) scale(1.01);
-
-        box-shadow:
-            0 25px 55px
-            rgba(0,0,0,0.35);
-    }
-
-    .mission-purple {
-
-        background:
-            linear-gradient(
-                145deg,
-                #6d28d9,
-                #9333ea,
-                #c026d3
+                #f97316
             );
     }
 
-    .mission-blue {
 
-        background:
-            linear-gradient(
-                145deg,
-                #1d4ed8,
-                #2563eb,
-                #0891b2
-            );
+    /* -------------------------------------------------
+       GAME PAGE
+    ------------------------------------------------- */
+
+    .game-header {
+        padding: 2rem;
+        border-radius: 26px;
+        background: white;
+        border: 1px solid rgba(80,70,120,0.10);
+        box-shadow: 0 12px 35px rgba(60,40,100,0.07);
+        margin-bottom: 1.5rem;
     }
 
-    .mission-pink {
-
-        background:
-            linear-gradient(
-                145deg,
-                #be185d,
-                #db2777,
-                #9333ea
-            );
-    }
-
-    .mission-orange {
-
-        background:
-            linear-gradient(
-                145deg,
-                #c2410c,
-                #ea580c,
-                #dc2626
-            );
-    }
-
-    .mission-indigo {
-
-        background:
-            linear-gradient(
-                145deg,
-                #3730a3,
-                #4f46e5,
-                #2563eb
-            );
-    }
-
-    .mission-green {
-
-        background:
-            linear-gradient(
-                145deg,
-                #047857,
-                #059669,
-                #0d9488
-            );
-    }
-
-    .mission-yellow {
-
-        background:
-            linear-gradient(
-                145deg,
-                #b45309,
-                #d97706,
-                #ea580c
-            );
-    }
-
-    .mission-red {
-
-        background:
-            linear-gradient(
-                145deg,
-                #b91c1c,
-                #dc2626,
-                #db2777
-            );
-    }
-
-    .mission-top {
-
-        display: flex;
-
-        justify-content: space-between;
-
-        align-items: center;
-
-        position: relative;
-
-        z-index: 2;
-    }
-
-    .mission-icon {
-
-        width: 58px;
-        height: 58px;
-
-        display: flex;
-
-        align-items: center;
-        justify-content: center;
-
-        border-radius: 18px;
-
-        background:
-            rgba(255,255,255,0.16);
-
-        border:
-            1px solid
-            rgba(255,255,255,0.20);
-
-        font-size: 29px;
-
-        box-shadow:
-            0 10px 20px
-            rgba(0,0,0,0.12);
-    }
-
-    .mission-tag {
-
-        padding: 6px 9px;
-
-        border-radius: 999px;
-
-        background:
-            rgba(0,0,0,0.18);
-
-        color: #ffffff;
-
-        font-size: 7px;
-
-        font-weight: 950;
-
-        letter-spacing: 1px;
-    }
-
-    .mission-name {
-
-        position: relative;
-
-        z-index: 2;
-
-        margin-top: 17px;
-
-        color: white;
-
-        font-size: 18px;
-
-        font-weight: 950;
-    }
-
-    .mission-description {
-
-        position: relative;
-
-        z-index: 2;
-
-        min-height: 49px;
-
-        margin-top: 7px;
-
-        color: rgba(255,255,255,0.83);
-
-        font-size: 10px;
-
-        line-height: 1.55;
-    }
-
-    .mission-reward {
-
-        position: relative;
-
-        z-index: 2;
-
-        margin-top: 11px;
-
-        color: #ffffff;
-
-        font-size: 9px;
-
-        font-weight: 950;
-    }
-
-
-    /* ========================================================
-       CLICKABLE GAME BUTTON
-       ======================================================== */
-
-    .game-button {
-
-        margin-top: 13px;
-    }
-
-    .game-button button {
-
-        width: 100% !important;
-
-        min-height: 42px !important;
-
-        border-radius: 12px !important;
-
-        border:
-            1px solid
-            rgba(255,255,255,0.20) !important;
-
-        background:
-            rgba(255,255,255,0.13) !important;
-
-        color: white !important;
-
-        font-size: 10px !important;
-
-        font-weight: 900 !important;
-
-        transition: 0.2s ease !important;
-    }
-
-    .game-button button:hover {
-
-        background:
-            rgba(255,255,255,0.24) !important;
-
-        border-color:
-            rgba(255,255,255,0.40) !important;
-
-        transform:
-            translateY(-2px) !important;
-
-        box-shadow:
-            0 8px 20px
-            rgba(0,0,0,0.18) !important;
-    }
-
-
-    /* ========================================================
-       OTHER PAGES
-       ======================================================== */
-
-    .page-card {
-
-        padding: 30px;
-
-        border-radius: 25px;
-
-        background:
-            linear-gradient(
-                145deg,
-                #151b32,
-                #101628
-            );
-
-        border:
-            1px solid
-            rgba(255,255,255,0.08);
-
-        box-shadow:
-            0 18px 40px
-            rgba(0,0,0,0.20);
-    }
-
-    .page-card h2 {
-
-        color: #ffffff;
-    }
-
-    .page-card p {
-
-        color: #94a3b8;
-    }
-
-    .page-badge {
-
-        display: inline-block;
-
-        padding: 7px 11px;
-
-        border-radius: 999px;
-
-        background:
-            rgba(124,58,237,0.18);
-
-        border:
-            1px solid
-            rgba(167,139,250,0.20);
-
-        color: #c4b5fd;
-
-        font-size: 8px;
-
-        font-weight: 950;
-
-        letter-spacing: 1px;
-    }
-
-
-    /* ========================================================
-       STREAMLIT INPUTS
-       ======================================================== */
-
-    div[data-baseweb="input"],
-    div[data-baseweb="textarea"],
-    div[data-baseweb="select"] {
-
-        background: #151b32 !important;
-    }
-
-    input,
-    textarea {
-
-        color: #ffffff !important;
-    }
-
-    label {
-
-        color: #cbd5e1 !important;
-    }
-
-    .stSelectbox div,
-    .stTextInput div {
-
-        border-radius: 12px;
-    }
-
-
-    /* ========================================================
-       BUTTONS
-       ======================================================== */
-
-    .stButton > button {
-
-        min-height: 44px;
-
-        border-radius: 13px;
-
-        border:
-            1px solid
-            rgba(124,58,237,0.35);
-
-        background:
-            linear-gradient(
-                135deg,
-                #7c3aed,
-                #db2777
-            );
-
-        color: white;
-
+    .game-header h1 {
         font-weight: 900;
-
-        transition: 0.2s ease;
+        color: #27233b;
     }
 
-    .stButton > button:hover {
-
-        transform: translateY(-2px);
-
-        box-shadow:
-            0 10px 25px
-            rgba(124,58,237,0.30);
+    .game-header p {
+        color: #777389;
     }
 
 
-    /* ========================================================
-       METRICS
-       ======================================================== */
+    /* -------------------------------------------------
+       PRIMARY BUTTON
+    ------------------------------------------------- */
 
-    [data-testid="stMetric"] {
-
-        background:
-            linear-gradient(
-                145deg,
-                #151b32,
-                #101628
-            );
-
-        border:
-            1px solid
-            rgba(255,255,255,0.08);
-
-        border-radius: 18px;
-
-        padding: 18px;
-    }
-
-    [data-testid="stMetricLabel"] {
-
-        color: #94a3b8 !important;
-    }
-
-    [data-testid="stMetricValue"] {
-
-        color: #ffffff !important;
+    .stButton button[kind="primary"] {
+        border: none;
+        border-radius: 13px;
+        font-weight: 800;
+        padding: 0.7rem 1.4rem;
+        background: linear-gradient(
+            90deg,
+            #7c3aed,
+            #ec4899
+        );
     }
 
 
-    /* ========================================================
-       ALERTS
-       ======================================================== */
+    /* -------------------------------------------------
+       INPUTS
+    ------------------------------------------------- */
 
-    .stAlert {
-
-        border-radius: 15px;
+    .stTextInput input,
+    .stTextArea textarea {
+        border-radius: 13px;
     }
 
 
-    /* ========================================================
-       MOBILE
-       ======================================================== */
+    /* -------------------------------------------------
+       HIDE STREAMLIT FOOTER
+    ------------------------------------------------- */
 
-    @media (max-width: 900px) {
-
-        .welcome-title {
-            font-size: 30px;
-        }
-
-        .welcome-card {
-            padding: 27px;
-        }
-
-        .top-title {
-            font-size: 25px;
-        }
-
+    footer {
+        visibility: hidden;
     }
 
     </style>
@@ -1289,688 +597,724 @@ st.markdown(
 )
 
 
-# ============================================================
-# SIDEBAR
-# ============================================================
+# =========================================================
+# LOGIN / SIGNUP PAGE
+# =========================================================
 
-with st.sidebar:
+def login_page():
 
-    st.html(
+    st.markdown(
         """
-        <div class="sidebar-brand">
+        <div class="login-shell">
 
-            <div class="brand-row">
+            <div class="login-brand">
 
-                <div class="sidebar-logo">
-                    💊
+                <div class="login-brand-icon">💊</div>
+
+                <div class="login-brand-title">
+                    PHARMAQUEST
                 </div>
 
-                <div>
-
-                    <div class="sidebar-title">
-                        PHARMAQUEST
-                    </div>
-
-                    <div class="sidebar-subtitle">
-                        PHARMACY LEARNING LAB
-                    </div>
-
+                <div class="login-brand-subtitle">
+                    Learn Pharmacy. Solve Cases. Become the Pharmacist.
                 </div>
 
             </div>
 
         </div>
-        """
+        """,
+        unsafe_allow_html=True
     )
 
-    st.markdown("---")
+    left, center, right = st.columns([1, 1.5, 1])
 
-    st.html(
-        """
-        <div class="sidebar-section">
-            MAIN
-        </div>
-        """
-    )
+    with center:
 
-    main_page = st.radio(
-        "MAIN",
-        [
-            "🏠 Home",
-            "📊 My Progress"
-        ],
-        label_visibility="collapsed",
-        key="main_navigation"
-    )
+        st.markdown('<div class="login-panel">', unsafe_allow_html=True)
 
-    st.html(
-        """
-        <div class="sidebar-section play">
-            🎮 PLAY & PRACTICE
-        </div>
-        """
-    )
+        if st.session_state.login_mode == "login":
 
-    play_page = st.radio(
-        "PLAY",
-        [
-            "🕵️ Drug Detective",
-            "🩺 Patient Case",
-            "🗣️ AI Patient",
-            "⚔️ Pharma Battle",
-            "🔐 Escape Room",
-            "🧬 Build the Patient"
-        ],
-        label_visibility="collapsed",
-        key="play_navigation"
-    )
+            st.markdown("### 👋 Welcome back")
+            st.write("Log in to continue your pharmacy journey.")
 
-    st.html(
-        """
-        <div class="sidebar-section learn">
-            🧠 LEARN
-        </div>
-        """
-    )
-
-    learn_page = st.radio(
-        "LEARN",
-        [
-            "❓ AI Quiz",
-            "🔥 Daily Challenge"
-        ],
-        label_visibility="collapsed",
-        key="learn_navigation"
-    )
-
-    st.html(
-        """
-        <div class="sidebar-section account">
-            👤 ACCOUNT
-        </div>
-        """
-    )
-
-    account_page = st.radio(
-        "ACCOUNT",
-        [
-            "🏆 My Profile"
-        ],
-        label_visibility="collapsed",
-        key="account_navigation"
-    )
-
-
-# ============================================================
-# DETERMINE PAGE
-# ============================================================
-
-if st.session_state.selected_page != "🏠 Home":
-
-    page = st.session_state.selected_page
-
-else:
-
-    if main_page != "🏠 Home":
-        page = main_page
-
-    elif play_page in [
-        "🕵️ Drug Detective",
-        "🩺 Patient Case",
-        "🗣️ AI Patient",
-        "⚔️ Pharma Battle",
-        "🔐 Escape Room",
-        "🧬 Build the Patient"
-    ]:
-
-        page = play_page
-
-    elif learn_page in [
-        "❓ AI Quiz",
-        "🔥 Daily Challenge"
-    ]:
-
-        page = learn_page
-
-    else:
-
-        page = account_page
-
-
-# ============================================================
-# SIDEBAR STATUS
-# ============================================================
-
-with st.sidebar:
-
-    st.html(
-        f"""
-        <div class="sidebar-footer-card">
-
-            <div class="footer-label">
-                CURRENT JOURNEY
-            </div>
-
-            <div class="footer-rank">
-                🧬 {level_name}
-            </div>
-
-            <div style="
-                margin-top:10px;
-                font-size:10px;
-                color:#cbd5e1;
-                font-weight:700;
-            ">
-                ⭐ {st.session_state.xp} XP
-            </div>
-
-            <div style="
-                margin-top:8px;
-                height:6px;
-                border-radius:10px;
-                background:#1e293b;
-                overflow:hidden;
-            ">
-
-                <div style="
-                    width:{progress_percent}%;
-                    height:100%;
-                    border-radius:10px;
-                    background:
-                        linear-gradient(
-                            90deg,
-                            #7c3aed,
-                            #ec4899,
-                            #f59e0b
-                        );
-                "></div>
-
-            </div>
-
-        </div>
-        """
-    )
-
-
-# ============================================================
-# HOME DASHBOARD
-# ============================================================
-
-if page == "🏠 Home":
-
-    st.html(
-        f"""
-        <div class="topbar">
-
-            <div>
-
-                <div class="eyebrow">
-                    PHARMAQUEST • STUDENT COMMAND
-                </div>
-
-                <div class="top-title">
-                    Your Pharmacy Journey
-                </div>
-
-                <div class="top-subtitle">
-                    Learn. Practice. Challenge yourself.
-                </div>
-
-            </div>
-
-        </div>
-
-
-        <div class="welcome-card">
-
-            <div class="welcome-label">
-                🧬 LEVEL {level_number} • {level_name.upper()}
-            </div>
-
-            <div class="welcome-title">
-                Ready for your next
-                pharmacy challenge?
-            </div>
-
-            <div class="welcome-text">
-                Build clinical thinking, medication knowledge
-                and counselling skills through interactive
-                pharmacy missions powered by AI.
-            </div>
-
-            <div class="welcome-pill">
-                ⭐ {st.session_state.xp} XP
-                &nbsp;&nbsp;•&nbsp;&nbsp;
-                🔥 {st.session_state.streak} day streak
-            </div>
-
-        </div>
-        """
-    )
-
-
-    # ========================================================
-    # QUICK STATS
-    # ========================================================
-
-    c1, c2, c3, c4 = st.columns(4)
-
-    stats = [
-
-        (
-            "⭐",
-            str(st.session_state.xp),
-            "TOTAL XP",
-            "Start earning experience"
-        ),
-
-        (
-            "🔥",
-            str(st.session_state.streak),
-            "DAY STREAK",
-            "Your learning streak"
-        ),
-
-        (
-            "🏆",
-            str(st.session_state.badges),
-            "BADGES",
-            "Achievements unlocked"
-        ),
-
-        (
-            "🧠",
-            str(st.session_state.missions_completed),
-            "MISSIONS",
-            "Completed missions"
-        )
-
-    ]
-
-    for col, data in zip(
-        [c1, c2, c3, c4],
-        stats
-    ):
-
-        icon, number, name, description = data
-
-        with col:
-
-            st.html(
-                f"""
-                <div class="mini-card">
-
-                    <div class="mini-icon">
-                        {icon}
-                    </div>
-
-                    <div class="mini-number">
-                        {number}
-                    </div>
-
-                    <div class="mini-label">
-                        {name}
-                    </div>
-
-                    <div class="mini-description">
-                        {description}
-                    </div>
-
-                </div>
-                """
+            email = st.text_input(
+                "Email",
+                placeholder="student@example.com",
+                key="login_email"
             )
 
-
-    # ========================================================
-    # LEVEL
-    # ========================================================
-
-    st.html(
-        f"""
-        <div class="level-card">
-
-            <div class="level-top">
-
-                <div class="level-badge">
-                    LV {level_number}
-                </div>
-
-                <div class="level-title">
-
-                    <div class="level-small">
-                        CURRENT PHARMA RANK
-                    </div>
-
-                    <div class="level-name">
-                        🧬 {level_name}
-                    </div>
-
-                </div>
-
-                <div class="level-xp">
-                    {st.session_state.xp} / {level_end} XP
-                </div>
-
-            </div>
-
-            <div class="level-track">
-
-                <div
-                    class="level-fill"
-                    style="width:{progress_percent}%;"
-                ></div>
-
-            </div>
-
-            <div class="level-bottom">
-
-                <span>
-                    🚀 {xp_to_next} XP until next level
-                </span>
-
-                <span>
-                    {progress_percent}%
-                </span>
-
-            </div>
-
-        </div>
-        """
-    )
-
-
-    # ========================================================
-    # MISSION HUB
-    # ========================================================
-
-    st.html(
-        """
-        <div class="section-heading">
-            🎮 Mission Hub
-        </div>
-
-        <div class="section-caption">
-            Choose your next challenge. Every mission trains a different pharmacy skill.
-        </div>
-        """
-    )
-
-
-    missions = [
-
-        (
-            "🕵️",
-            "Drug Detective",
-            "Investigate clues and identify the mystery medicine.",
-            "DEDUCTION",
-            "+50 XP",
-            "mission-purple"
-        ),
-
-        (
-            "🩺",
-            "Patient Case",
-            "Think like a clinical pharmacist and solve a fictional case.",
-            "CLINICAL",
-            "+75 XP",
-            "mission-blue"
-        ),
-
-        (
-            "🗣️",
-            "AI Patient",
-            "Practice counselling with realistic patient personalities.",
-            "COUNSELLING",
-            "+60 XP",
-            "mission-pink"
-        ),
-
-        (
-            "⚔️",
-            "Pharma Battle",
-            "Answer rapid-fire pharmacy questions.",
-            "BATTLE",
-            "+50 XP",
-            "mission-orange"
-        ),
-
-        (
-            "🔐",
-            "Escape Room",
-            "Solve a pharmacy mystery before time runs out.",
-            "MYSTERY",
-            "+100 XP",
-            "mission-indigo"
-        ),
-
-        (
-            "🧬",
-            "Build the Patient",
-            "Explore treatment decisions in a fictional patient.",
-            "SIMULATION",
-            "+100 XP",
-            "mission-green"
-        ),
-
-        (
-            "❓",
-            "AI Quiz",
-            "Create a personalized pharmacy quiz with AI.",
-            "KNOWLEDGE",
-            "+50 XP",
-            "mission-yellow"
-        ),
-
-        (
-            "🔥",
-            "Daily Challenge",
-            "Complete today's challenge and earn bonus XP.",
-            "DAILY",
-            "+75 XP",
-            "mission-red"
-        )
-
-    ]
-
-
-    columns = st.columns(4)
-
-
-    for i, mission in enumerate(missions):
-
-        icon, title, description, category, reward, card_class = mission
-
-        with columns[i % 4]:
-
-            st.html(
-                f"""
-                <div class="mission-card {card_class}">
-
-                    <div class="mission-top">
-
-                        <div class="mission-icon">
-                            {icon}
-                        </div>
-
-                        <div class="mission-tag">
-                            {category}
-                        </div>
-
-                    </div>
-
-                    <div class="mission-name">
-                        {title}
-                    </div>
-
-                    <div class="mission-description">
-                        {description}
-                    </div>
-
-                    <div class="mission-reward">
-                        ⚡ {reward}
-                    </div>
-
-                </div>
-                """
+            password = st.text_input(
+                "Password",
+                type="password",
+                key="login_password"
             )
-
-            # ------------------------------------------------
-            # CLICKABLE BUTTON
-            # ------------------------------------------------
 
             if st.button(
-                f"▶ OPEN {title.upper()}",
-                key=f"mission_{i}",
+                "🚀 LOGIN TO PHARMAQUEST",
+                type="primary",
                 use_container_width=True
             ):
 
-                st.session_state.selected_page = (
-                    f"{icon} {title}"
-                )
+                if not email or not password:
+                    st.error("Please enter your email and password.")
 
+                elif not supabase:
+                    st.error("Supabase is not connected.")
+
+                else:
+
+                    try:
+
+                        result = supabase.auth.sign_in_with_password(
+                            {
+                                "email": email,
+                                "password": password
+                            }
+                        )
+
+                        if result.user:
+
+                            st.session_state.user = result.user
+
+                            profile = load_profile()
+
+                            if not profile:
+
+                                username = (
+                                    result.user.user_metadata.get(
+                                        "username"
+                                    )
+                                    or email.split("@")[0]
+                                )
+
+                                profile = create_profile(
+                                    result.user,
+                                    username
+                                )
+
+                            st.session_state.profile = profile
+                            st.session_state.page = "Home"
+
+                            st.success("Welcome to PharmaQuest!")
+
+                            st.rerun()
+
+                    except Exception as e:
+
+                        st.error(
+                            f"Login failed: {str(e)}"
+                        )
+
+            st.markdown("---")
+
+            st.write("Don't have a PharmaQuest account?")
+
+            if st.button(
+                "✨ CREATE NEW ACCOUNT",
+                use_container_width=True
+            ):
+
+                st.session_state.login_mode = "signup"
                 st.rerun()
 
+        else:
 
-# ============================================================
-# MY PROGRESS
-# ============================================================
+            st.markdown("### ✨ Create your account")
+            st.write(
+                "Start your own pharmacy learning journey."
+            )
 
-elif page == "📊 My Progress":
+            username = st.text_input(
+                "Username",
+                placeholder="e.g. Aiman"
+            )
 
-    st.html(
-        """
-        <div class="topbar">
+            email = st.text_input(
+                "Email",
+                placeholder="student@example.com"
+            )
 
-            <div>
+            password = st.text_input(
+                "Password",
+                type="password"
+            )
 
-                <div class="eyebrow">
-                    PROGRESSION CENTER
-                </div>
+            confirm_password = st.text_input(
+                "Confirm password",
+                type="password"
+            )
 
-                <div class="top-title">
-                    My Progress
-                </div>
+            if st.button(
+                "🎓 CREATE MY ACCOUNT",
+                type="primary",
+                use_container_width=True
+            ):
 
-                <div class="top-subtitle">
-                    Track your pharmacy learning journey.
-                </div>
+                if not username or not email or not password:
 
-            </div>
+                    st.error(
+                        "Please complete all fields."
+                    )
 
-        </div>
-        """
+                elif password != confirm_password:
+
+                    st.error(
+                        "Passwords do not match."
+                    )
+
+                elif len(password) < 6:
+
+                    st.error(
+                        "Password must contain at least 6 characters."
+                    )
+
+                elif not supabase:
+
+                    st.error(
+                        "Supabase is not connected."
+                    )
+
+                else:
+
+                    try:
+
+                        result = supabase.auth.sign_up(
+                            {
+                                "email": email,
+                                "password": password,
+                                "options": {
+                                    "data": {
+                                        "username": username
+                                    }
+                                }
+                            }
+                        )
+
+                        if result.user:
+
+                            if result.session:
+
+                                profile = create_profile(
+                                    result.user,
+                                    username
+                                )
+
+                                st.session_state.user = result.user
+                                st.session_state.profile = profile
+                                st.session_state.page = "Home"
+
+                                st.success(
+                                    "Account created successfully!"
+                                )
+
+                                st.rerun()
+
+                            else:
+
+                                st.success(
+                                    "Account created! "
+                                    "Please confirm your email, "
+                                    "then log in."
+                                )
+
+                        else:
+
+                            st.error(
+                                "Could not create account."
+                            )
+
+                    except Exception as e:
+
+                        st.error(
+                            f"Signup failed: {str(e)}"
+                        )
+
+            st.markdown("---")
+
+            if st.button(
+                "← BACK TO LOGIN",
+                use_container_width=True
+            ):
+
+                st.session_state.login_mode = "login"
+                st.rerun()
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
+# =========================================================
+# SIDEBAR
+# =========================================================
+
+def sidebar():
+
+    profile = st.session_state.profile
+
+    username = profile.get(
+        "username",
+        "Student"
     )
 
-    st.html(
-        f"""
-        <div class="page-card">
+    xp = profile.get("xp", 0)
 
-            <div class="page-badge">
-                LEVEL {level_number}
+    level, title, next_xp = get_level_info(xp)
+
+    with st.sidebar:
+
+        st.markdown(
+            """
+            <div style="
+                text-align:center;
+                padding:10px 0 20px 0;
+            ">
+
+                <div style="
+                    font-size:3rem;
+                ">
+                    💊
+                </div>
+
+                <div style="
+                    font-size:1.45rem;
+                    font-weight:900;
+                    color:#35265c;
+                ">
+                    PharmaQuest
+                </div>
+
+                <div style="
+                    color:#817995;
+                    font-size:0.8rem;
+                ">
+                    Pharmacy Learning Arena
+                </div>
+
             </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-            <h2>
-                🧬 {level_name}
-            </h2>
+        st.markdown(
+            f"""
+            <div style="
+                padding:14px;
+                border-radius:18px;
+                background:linear-gradient(
+                    135deg,
+                    #7c3aed,
+                    #ec4899
+                );
+                color:white;
+                margin-bottom:18px;
+            ">
+
+                <div style="
+                    font-size:0.78rem;
+                    opacity:0.85;
+                ">
+                    CURRENT JOURNEY
+                </div>
+
+                <div style="
+                    font-size:1.1rem;
+                    font-weight:800;
+                    margin-top:5px;
+                ">
+                    {title}
+                </div>
+
+                <div style="
+                    margin-top:6px;
+                    font-size:0.82rem;
+                ">
+                    Level {level} • {xp} XP
+                </div>
+
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.markdown("### 🧭 MAIN")
+
+        if st.button(
+            "🏠  Home Dashboard",
+            use_container_width=True
+        ):
+            st.session_state.page = "Home"
+            st.rerun()
+
+        if st.button(
+            "📊  My Progress",
+            use_container_width=True
+        ):
+            st.session_state.page = "Progress"
+            st.rerun()
+
+        st.markdown("### 🎮 PLAY & PRACTICE")
+
+        menu_items = [
+            ("🕵️  Drug Detective", "Drug Detective"),
+            ("🩺  Patient Case", "Patient Case"),
+            ("🗣️  AI Patient", "AI Patient"),
+            ("⚔️  Pharma Battle", "Pharma Battle"),
+            ("🔐  Escape Room", "Escape Room"),
+            ("🧬  Build the Patient", "Build the Patient"),
+        ]
+
+        for label, page in menu_items:
+
+            if st.button(
+                label,
+                use_container_width=True
+            ):
+
+                st.session_state.page = page
+                st.rerun()
+
+        st.markdown("### 🧠 LEARN")
+
+        if st.button(
+            "❓  AI Quiz",
+            use_container_width=True
+        ):
+
+            st.session_state.page = "AI Quiz"
+            st.rerun()
+
+        if st.button(
+            "🔥  Daily Challenge",
+            use_container_width=True
+        ):
+
+            st.session_state.page = "Daily Challenge"
+            st.rerun()
+
+        st.markdown("### 👤 ACCOUNT")
+
+        if st.button(
+            "🏆  My Profile",
+            use_container_width=True
+        ):
+
+            st.session_state.page = "Profile"
+            st.rerun()
+
+        st.markdown("---")
+
+        if st.button(
+            "🚪  Logout",
+            use_container_width=True
+        ):
+
+            logout()
+
+
+# =========================================================
+# HOME DASHBOARD
+# =========================================================
+
+def home_page():
+
+    profile = st.session_state.profile
+
+    username = profile.get(
+        "username",
+        "Future Pharmacist"
+    )
+
+    xp = profile.get("xp", 0)
+    missions = profile.get(
+        "missions_completed",
+        0
+    )
+
+    level, title, next_xp = get_level_info(xp)
+
+    st.markdown(
+        f"""
+        <div class="home-hero">
+
+            <h1>
+                Hey, {username}! 👋
+            </h1>
 
             <p>
-                You currently have
-                <strong>{st.session_state.xp} XP</strong>.
+                Welcome back to your pharmacy learning arena.
+                Choose a mission and build your clinical skills.
             </p>
 
-            <div class="level-track">
-
-                <div
-                    class="level-fill"
-                    style="width:{progress_percent}%;"
-                ></div>
-
+            <div style="
+                margin-top:15px;
+                font-weight:800;
+                font-size:1.05rem;
+            ">
+                {title} • Level {level}
             </div>
 
-            <p style="
-                color:#64748b;
-                font-size:11px;
-                margin-top:8px;
-            ">
-                {xp_to_next} XP remaining until your next level.
-            </p>
-
         </div>
-        """
+        """,
+        unsafe_allow_html=True
     )
 
     st.write("")
 
-    p1, p2, p3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
 
-    with p1:
-        st.metric(
-            "⭐ Total XP",
-            st.session_state.xp
+    with c1:
+        st.markdown(
+            f"""
+            <div class="stat-card">
+                <div class="stat-icon">⚡</div>
+                <div class="stat-number">{xp}</div>
+                <div class="stat-label">Total XP</div>
+            </div>
+            """,
+            unsafe_allow_html=True
         )
 
-    with p2:
-        st.metric(
-            "🏆 Badges",
-            st.session_state.badges
+    with c2:
+        st.markdown(
+            f"""
+            <div class="stat-card">
+                <div class="stat-icon">🎯</div>
+                <div class="stat-number">{missions}</div>
+                <div class="stat-label">Missions Completed</div>
+            </div>
+            """,
+            unsafe_allow_html=True
         )
 
-    with p3:
-        st.metric(
-            "🧠 Missions",
-            st.session_state.missions_completed
+    with c3:
+        st.markdown(
+            f"""
+            <div class="stat-card">
+                <div class="stat-icon">🔥</div>
+                <div class="stat-number">
+                    {profile.get("streak", 0)}
+                </div>
+                <div class="stat-label">Day Streak</div>
+            </div>
+            """,
+            unsafe_allow_html=True
         )
 
+    with c4:
+        st.markdown(
+            f"""
+            <div class="stat-card">
+                <div class="stat-icon">🏆</div>
+                <div class="stat-number">
+                    {profile.get("badges", 0)}
+                </div>
+                <div class="stat-label">Badges</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-# ============================================================
-# DRUG DETECTIVE
-# ============================================================
-
-elif page == "🕵️ Drug Detective":
-
-    st.html(
+    st.markdown(
         """
-        <div class="topbar">
+        <div class="section-title">
+            🎮 Choose Your Mission
+        </div>
 
-            <div>
+        <div class="section-subtitle">
+            Practice, investigate, solve and earn XP.
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-                <div class="eyebrow">
-                    🎮 PLAY & PRACTICE
-                </div>
+    # -----------------------------------------------------
+    # ROW 1
+    # -----------------------------------------------------
 
-                <div class="top-title">
-                    🕵️ Drug Detective
-                </div>
+    c1, c2, c3, c4 = st.columns(4)
 
-                <div class="top-subtitle">
-                    Investigate clues. Think clinically. Identify the medicine.
-                </div>
+    with c1:
 
+        if st.button(
+            "🕵️\n\nDRUG DETECTIVE\n\nInvestigate clues and identify mysterious medicines.\n\n+50 XP",
+            key="card_drug",
+            use_container_width=True
+        ):
+
+            st.session_state.page = "Drug Detective"
+            st.rerun()
+
+    with c2:
+
+        if st.button(
+            "🩺\n\nPATIENT CASE\n\nSolve fictional clinical cases and choose the best therapy.\n\n+75 XP",
+            key="card_case",
+            use_container_width=True
+        ):
+
+            st.session_state.page = "Patient Case"
+            st.rerun()
+
+    with c3:
+
+        if st.button(
+            "🗣️\n\nAI PATIENT\n\nInterview an AI patient and discover the clinical story.\n\n+60 XP",
+            key="card_patient",
+            use_container_width=True
+        ):
+
+            st.session_state.page = "AI Patient"
+            st.rerun()
+
+    with c4:
+
+        if st.button(
+            "⚔️\n\nPHARMA BATTLE\n\nTest your pharmacy knowledge in competitive challenges.\n\n+100 XP",
+            key="card_battle",
+            use_container_width=True
+        ):
+
+            st.session_state.page = "Pharma Battle"
+            st.rerun()
+
+    # -----------------------------------------------------
+    # ROW 2
+    # -----------------------------------------------------
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    with c1:
+
+        if st.button(
+            "🔐\n\nESCAPE ROOM\n\nSolve pharmacy puzzles before time runs out.\n\n+100 XP",
+            key="card_escape",
+            use_container_width=True
+        ):
+
+            st.session_state.page = "Escape Room"
+            st.rerun()
+
+    with c2:
+
+        if st.button(
+            "🧬\n\nBUILD THE PATIENT\n\nConstruct the patient profile and treatment plan.\n\n+80 XP",
+            key="card_build",
+            use_container_width=True
+        ):
+
+            st.session_state.page = "Build the Patient"
+            st.rerun()
+
+    with c3:
+
+        if st.button(
+            "❓\n\nAI QUIZ\n\nChallenge yourself with AI-generated pharmacy MCQs.\n\n+40 XP",
+            key="card_quiz",
+            use_container_width=True
+        ):
+
+            st.session_state.page = "AI Quiz"
+            st.rerun()
+
+    with c4:
+
+        if st.button(
+            "🔥\n\nDAILY CHALLENGE\n\nComplete today's pharmacy challenge and keep your streak alive.\n\n+50 XP",
+            key="card_daily",
+            use_container_width=True
+        ):
+
+            st.session_state.page = "Daily Challenge"
+            st.rerun()
+
+    # -----------------------------------------------------
+    # PROGRESS
+    # -----------------------------------------------------
+
+    current_level_start = 0
+
+    if level == 1:
+        current_level_start = 0
+    elif level == 2:
+        current_level_start = 500
+    elif level == 3:
+        current_level_start = 1200
+    elif level == 4:
+        current_level_start = 2500
+    elif level == 5:
+        current_level_start = 4500
+    else:
+        current_level_start = 7000
+
+    progress_range = max(
+        next_xp - current_level_start,
+        1
+    )
+
+    progress = min(
+        max(
+            (xp - current_level_start)
+            / progress_range,
+            0
+        ),
+        1
+    )
+
+    progress_percent = int(progress * 100)
+
+    st.markdown(
+        f"""
+        <div class="progress-panel">
+
+            <div style="
+                display:flex;
+                justify-content:space-between;
+                font-weight:800;
+                color:#332c4a;
+            ">
+
+                <span>
+                    🧬 Level {level} • {title}
+                </span>
+
+                <span>
+                    {xp} / {next_xp} XP
+                </span>
+
+            </div>
+
+            <div class="progress-bar">
+                <div
+                    class="progress-fill"
+                    style="width:{progress_percent}%"
+                ></div>
             </div>
 
         </div>
-        """
+        """,
+        unsafe_allow_html=True
     )
 
-    st.html(
+
+# =========================================================
+# DRUG DETECTIVE
+# =========================================================
+
+def drug_detective():
+
+    st.markdown(
         """
-        <div class="page-card">
+        <div class="game-header">
 
-            <div class="page-badge">
-                +50 XP • DEDUCTION
-            </div>
-
-            <h2>
-                🔎 Open a new case
-            </h2>
+            <h1>🕵️ Drug Detective</h1>
 
             <p>
-                Choose a pharmacy topic and let AI create
-                a mystery case for you.
+                Investigate clues. Think clinically.
+                Identify the medicine.
             </p>
 
         </div>
-        """
+        """,
+        unsafe_allow_html=True
     )
 
     topic = st.text_input(
@@ -1978,496 +1322,597 @@ elif page == "🕵️ Drug Detective":
         placeholder="Example: antibiotics, diabetes, cardiovascular drugs"
     )
 
-    if st.button("🔎 START INVESTIGATION"):
+    if st.button(
+        "🔎 START INVESTIGATION",
+        type="primary"
+    ):
 
-        client = get_gemini_client()
+        if not topic:
 
-        if client is None:
-
-            st.error(
-                "Gemini API key is not connected. "
-                "Add GEMINI_API_KEY to Streamlit Secrets."
+            st.warning(
+                "Enter a pharmacy topic first."
             )
 
         else:
 
-            prompt = f"""
-You are an educational pharmacy game master.
+            client = get_gemini()
 
-Create a Drug Detective mystery for a Pharm-D student.
+            if not client:
 
-Topic:
-{topic if topic else "General Pharmacology"}
+                st.error(
+                    "Gemini API key is not configured."
+                )
 
-Give:
+            else:
 
-1. A short fictional patient situation
-2. Three clinical clues
-3. Four possible medicines
+                prompt = f"""
+                You are creating a pharmacy education mystery game
+                for Pharm-D students.
 
-Do NOT reveal the correct answer.
+                Topic:
+                {topic}
 
-Make it challenging but educational.
+                Create a Drug Detective mystery.
 
-This is an educational simulation only.
-Do not provide personalized medical advice.
-"""
+                Give:
+                1. Three clinical clues.
+                2. One mechanism clue.
+                3. One side-effect clue.
+                4. Ask the student to identify the drug.
+                5. Do NOT immediately reveal the answer.
 
-            try:
+                Keep the case educational and fictional.
+                """
 
-                with st.spinner(
-                    "🧠 Building your mystery..."
-                ):
+                try:
 
                     response = client.models.generate_content(
                         model="gemini-3.8-flash",
                         contents=prompt
                     )
 
-                st.markdown("### 🔍 CASE FILE")
+                    st.markdown(
+                        "### 🔍 Mystery Case"
+                    )
+
+                    st.write(
+                        response.text
+                    )
+
+                    if st.button(
+                        "✅ I solved the case!",
+                        type="primary"
+                    ):
+
+                        save_progress(
+                            xp_add=50,
+                            mission_complete=True
+                        )
+
+                        st.success(
+                            "Great work! +50 XP added."
+                        )
+
+                except Exception as e:
+
+                    st.error(
+                        f"AI error: {str(e)}"
+                    )
+
+
+# =========================================================
+# PATIENT CASE
+# =========================================================
+
+def patient_case():
+
+    st.markdown(
+        """
+        <div class="game-header">
+
+            <h1>🩺 Patient Case</h1>
+
+            <p>
+                Analyze the patient and make the best clinical decision.
+            </p>
+
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    topic = st.text_input(
+        "Clinical topic",
+        placeholder="Example: hypertension, diabetes, asthma"
+    )
+
+    if st.button(
+        "🩺 GENERATE CASE",
+        type="primary"
+    ):
+
+        if not topic:
+
+            st.warning(
+                "Enter a clinical topic."
+            )
+
+        else:
+
+            client = get_gemini()
+
+            if client:
+
+                prompt = f"""
+                Create a fictional pharmacy clinical case for a
+                Pharm-D student.
+
+                Topic:
+                {topic}
+
+                Include:
+                - patient age and sex
+                - chief complaint
+                - history
+                - relevant medicines
+                - vital/lab information
+                - three possible therapeutic decisions
+
+                Ask the student what they would recommend.
+
+                Do not give the answer immediately.
+                """
+
+                try:
+
+                    response = client.models.generate_content(
+                        model="gemini-3.8-flash",
+                        contents=prompt
+                    )
+
+                    st.markdown("### 🩺 Clinical Case")
+
+                    st.write(response.text)
+
+                    if st.button(
+                        "🎯 Complete Case",
+                        type="primary"
+                    ):
+
+                        save_progress(
+                            xp_add=75,
+                            mission_complete=True
+                        )
+
+                        st.success(
+                            "Case completed! +75 XP."
+                        )
+
+            else:
+
+                st.error(
+                    "Gemini API key is missing."
+                )
+
+
+# =========================================================
+# AI PATIENT
+# =========================================================
+
+def ai_patient():
+
+    st.markdown(
+        """
+        <div class="game-header">
+
+            <h1>🗣️ AI Patient</h1>
+
+            <p>
+                Practice patient interviewing and clinical questioning.
+            </p>
+
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    condition = st.text_input(
+        "Patient condition",
+        placeholder="Example: diabetes"
+    )
+
+    question = st.text_input(
+        "Ask your patient a question"
+    )
+
+    if st.button(
+        "🗣️ TALK TO PATIENT",
+        type="primary"
+    ):
+
+        client = get_gemini()
+
+        if not client:
+
+            st.error(
+                "Gemini API key is missing."
+            )
+
+        elif not condition:
+
+            st.warning(
+                "Enter a patient condition."
+            )
+
+        elif not question:
+
+            st.warning(
+                "Ask the patient something."
+            )
+
+        else:
+
+            prompt = f"""
+            Act as a fictional pharmacy patient.
+
+            Condition:
+            {condition}
+
+            Student question:
+            {question}
+
+            Respond naturally like a patient.
+            Do not act as a doctor.
+            Do not provide definitive medical diagnosis.
+            """
+
+            try:
+
+                response = client.models.generate_content(
+                    model="gemini-3.8-flash",
+                    contents=prompt
+                )
+
+                st.markdown("### 🗣️ Patient")
 
                 st.write(response.text)
 
             except Exception as e:
 
                 st.error(
-                    "Gemini could not generate the case."
+                    f"AI error: {str(e)}"
                 )
 
-                st.code(str(e))
 
-
-# ============================================================
-# PATIENT CASE
-# ============================================================
-
-elif page == "🩺 Patient Case":
-
-    st.html(
-        """
-        <div class="topbar">
-
-            <div>
-
-                <div class="eyebrow">
-                    🎮 PLAY & PRACTICE
-                </div>
-
-                <div class="top-title">
-                    🩺 Patient Case
-                </div>
-
-                <div class="top-subtitle">
-                    Think like a clinical pharmacist.
-                </div>
-
-            </div>
-
-        </div>
-        """
-    )
-
-    st.info(
-        "This is a fictional educational clinical pharmacy simulation."
-    )
-
-    condition = st.text_input(
-        "Choose a condition",
-        placeholder="Example: hypertension, asthma, diabetes"
-    )
-
-    if st.button("🩺 GENERATE CASE"):
-
-        client = get_gemini_client()
-
-        if client is None:
-
-            st.error(
-                "Gemini API key is not connected. "
-                "Add GEMINI_API_KEY to Streamlit Secrets."
-            )
-
-        else:
-
-            prompt = f"""
-Create a fictional educational clinical pharmacy case.
-
-Condition:
-{condition if condition else "Hypertension"}
-
-Include:
-
-- Fictional patient background
-- Presenting complaint
-- Medication history
-- Relevant laboratory information
-- Important clues
-- Clinical reasoning questions
-
-This is an educational simulation only.
-Do not provide personalized medical advice.
-"""
-
-            try:
-
-                with st.spinner(
-                    "🩺 Preparing the patient..."
-                ):
-
-                    response = client.models.generate_content(
-                        model="gemini-3.8-flash",
-                        contents=prompt
-                    )
-
-                st.markdown("### 🧑‍⚕️ PATIENT FILE")
-
-                st.write(response.text)
-
-            except Exception as e:
-
-                st.error("Gemini error")
-
-                st.code(str(e))
-
-
-# ============================================================
-# AI PATIENT
-# ============================================================
-
-elif page == "🗣️ AI Patient":
-
-    st.html(
-        """
-        <div class="topbar">
-
-            <div>
-
-                <div class="eyebrow">
-                    🧠 COUNSELLING LAB
-                </div>
-
-                <div class="top-title">
-                    🗣️ AI Patient
-                </div>
-
-                <div class="top-subtitle">
-                    Practice your communication with realistic patient personalities.
-                </div>
-
-            </div>
-
-        </div>
-        """
-    )
-
-    personality = st.selectbox(
-        "Patient personality",
-        [
-            "Anxious",
-            "Angry",
-            "Confused",
-            "Non-adherent",
-            "Friendly"
-        ]
-    )
-
-    message = st.text_area(
-        "What would you say to the patient?",
-        height=130
-    )
-
-    if st.button("💬 TALK TO PATIENT"):
-
-        client = get_gemini_client()
-
-        if client is None:
-
-            st.error(
-                "Gemini API key is not connected. "
-                "Add GEMINI_API_KEY to Streamlit Secrets."
-            )
-
-        elif not message:
-
-            st.warning(
-                "Enter something to say to the patient."
-            )
-
-        else:
-
-            prompt = f"""
-You are a fictional patient in a pharmacy counselling simulation.
-
-Patient personality:
-{personality}
-
-Pharmacy student's message:
-{message}
-
-Respond naturally as the patient.
-
-Keep the conversation realistic.
-
-This is communication practice only.
-Do not provide medical advice.
-"""
-
-            try:
-
-                with st.spinner(
-                    "🗣️ Patient is responding..."
-                ):
-
-                    response = client.models.generate_content(
-                        model="gemini-3.8-flash",
-                        contents=prompt
-                    )
-
-                st.markdown("### 🧑 PATIENT")
-
-                st.write(response.text)
-
-            except Exception as e:
-
-                st.error("Gemini error")
-
-                st.code(str(e))
-
-
-# ============================================================
+# =========================================================
 # AI QUIZ
-# ============================================================
+# =========================================================
 
-elif page == "❓ AI Quiz":
+def ai_quiz():
 
-    st.html(
+    st.markdown(
         """
-        <div class="topbar">
+        <div class="game-header">
 
-            <div>
+            <h1>❓ AI Quiz</h1>
 
-                <div class="eyebrow">
-                    🧠 LEARNING LAB
-                </div>
-
-                <div class="top-title">
-                    ❓ AI Pharmacy Quiz
-                </div>
-
-                <div class="top-subtitle">
-                    Generate a pharmacy challenge around the topic you choose.
-                </div>
-
-            </div>
+            <p>
+                Test your pharmacy knowledge with AI-generated MCQs.
+            </p>
 
         </div>
-        """
+        """,
+        unsafe_allow_html=True
     )
 
     topic = st.text_input(
         "Quiz topic",
-        placeholder="Example: autonomic nervous system pharmacology"
+        placeholder="Example: pharmacology, medicinal chemistry"
     )
 
-    difficulty = st.selectbox(
-        "Difficulty",
-        [
-            "Easy",
-            "Medium",
-            "Hard"
-        ]
-    )
+    if st.button(
+        "🧠 GENERATE QUIZ",
+        type="primary"
+    ):
 
-    number = st.slider(
-        "Number of questions",
-        1,
-        10,
-        5
-    )
+        if not topic:
 
-    if st.button("🧠 CREATE QUIZ"):
-
-        client = get_gemini_client()
-
-        if client is None:
-
-            st.error(
-                "Gemini API key is not connected. "
-                "Add GEMINI_API_KEY to Streamlit Secrets."
+            st.warning(
+                "Enter a topic."
             )
 
         else:
 
-            prompt = f"""
-You are a pharmacy education game master.
+            client = get_gemini()
 
-Create {number} MCQs for a Pharm-D student.
+            if client:
 
-Topic:
-{topic if topic else "General Pharmacy"}
+                prompt = f"""
+                Create 5 pharmacy MCQs for a Pharm-D student.
 
-Difficulty:
-{difficulty}
+                Topic:
+                {topic}
 
-Each question must have:
+                For every question provide:
+                A, B, C, D options.
 
-A
-B
-C
-D
+                Clearly identify the correct answer after
+                each question.
 
-At the end give an ANSWER KEY.
+                Keep the questions educational.
+                """
 
-Do not give explanations unless requested.
-
-This is an educational quiz.
-"""
-
-            try:
-
-                with st.spinner(
-                    "🧠 Building your quiz..."
-                ):
+                try:
 
                     response = client.models.generate_content(
                         model="gemini-3.8-flash",
                         contents=prompt
                     )
 
-                st.markdown("### 📚 YOUR CHALLENGE")
+                    st.markdown("### 🧠 Your Quiz")
 
-                st.write(response.text)
+                    st.write(response.text)
 
-            except Exception as e:
+                    if st.button(
+                        "🏆 Complete Quiz",
+                        type="primary"
+                    ):
 
-                st.error("Gemini error")
+                        save_progress(
+                            xp_add=40,
+                            mission_complete=True
+                        )
 
-                st.code(str(e))
+                        st.success(
+                            "Quiz completed! +40 XP."
+                        )
+
+                except Exception as e:
+
+                    st.error(
+                        f"AI error: {str(e)}"
+                    )
+
+            else:
+
+                st.error(
+                    "Gemini API key is missing."
+                )
 
 
-# ============================================================
-# COMING SOON MISSIONS
-# ============================================================
+# =========================================================
+# PLACEHOLDER GAMES
+# =========================================================
 
-elif page in [
-    "⚔️ Pharma Battle",
-    "🔐 Escape Room",
-    "🧬 Build the Patient",
-    "🔥 Daily Challenge"
-]:
+def placeholder_game(title, icon, description, xp):
 
-    st.html(
+    st.markdown(
         f"""
-        <div class="topbar">
+        <div class="game-header">
 
-            <div>
+            <h1>{icon} {title}</h1>
 
-                <div class="eyebrow">
-                    🚀 PHARMAQUEST ROADMAP
-                </div>
-
-                <div class="top-title">
-                    {page}
-                </div>
-
-                <div class="top-subtitle">
-                    An interactive pharmacy experience is being prepared.
-                </div>
-
-            </div>
+            <p>{description}</p>
 
         </div>
-
-        <div class="page-card" style="text-align:center;">
-
-            <div style="
-                font-size:58px;
-            ">
-                🚀
-            </div>
-
-            <h2>
-                Mission Loading
-            </h2>
-
-            <p style="
-                color:#94a3b8;
-                font-size:13px;
-            ">
-                This feature is part of the PharmaQuest roadmap.
-                The mission mechanics will be added next.
-            </p>
-
-        </div>
-        """
+        """,
+        unsafe_allow_html=True
     )
 
+    st.info(
+        "🚧 This mission is ready for development."
+    )
 
-# ============================================================
-# PROFILE
-# ============================================================
+    st.write(
+        "The game structure is already connected "
+        "to the PharmaQuest dashboard."
+    )
 
-elif page == "🏆 My Profile":
+    if st.button(
+        f"🎯 COMPLETE DEMO MISSION (+{xp} XP)",
+        type="primary"
+    ):
 
-    st.html(
-        f"""
-        <div class="topbar">
+        save_progress(
+            xp_add=xp,
+            mission_complete=True
+        )
 
-            <div>
+        st.success(
+            f"Mission completed! +{xp} XP."
+        )
 
-                <div class="eyebrow">
-                    👤 STUDENT PROFILE
-                </div>
 
-                <div class="top-title">
-                    My Pharmacy Profile
-                </div>
+# =========================================================
+# PROGRESS
+# =========================================================
 
-                <div class="top-subtitle">
-                    Your achievements and learning identity.
-                </div>
+def progress_page():
 
-            </div>
+    profile = st.session_state.profile
 
-        </div>
+    xp = profile.get("xp", 0)
+    level, title, next_xp = get_level_info(xp)
 
-        <div class="page-card">
+    st.markdown(
+        """
+        <div class="game-header">
 
-            <div class="page-badge">
-                LEVEL {level_number}
-            </div>
-
-            <h2>
-                🧬 {level_name}
-            </h2>
+            <h1>📊 My Progress</h1>
 
             <p>
-                Your PharmaQuest journey is just beginning.
+                Track your journey toward becoming a
+                pharmacy expert.
             </p>
 
-            <div style="
-                margin-top:25px;
-                padding:18px;
-                border-radius:18px;
-                background:#101628;
-                border:1px solid rgba(255,255,255,0.08);
-            ">
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-                <strong style="color:#ffffff;">
-                    ⭐ {st.session_state.xp} XP
-                </strong>
+    c1, c2, c3 = st.columns(3)
 
-                <br>
+    with c1:
+        st.metric(
+            "Level",
+            level
+        )
 
-                <span style="
-                    color:#64748b;
-                    font-size:11px;
-                ">
-                    Experience earned
-                </span>
+    with c2:
+        st.metric(
+            "XP",
+            xp
+        )
 
-            </div>
+    with c3:
+        st.metric(
+            "Missions",
+            profile.get(
+                "missions_completed",
+                0
+            )
+        )
+
+    st.markdown(
+        f"### {title}"
+    )
+
+    st.progress(
+        min(
+            (xp % 500) / 500,
+            1
+        )
+    )
+
+
+# =========================================================
+# PROFILE
+# =========================================================
+
+def profile_page():
+
+    profile = st.session_state.profile
+
+    level, title, _ = get_level_info(
+        profile.get("xp", 0)
+    )
+
+    st.markdown(
+        """
+        <div class="game-header">
+
+            <h1>🏆 My Profile</h1>
+
+            <p>
+                Your personal PharmaQuest identity.
+            </p>
 
         </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        f"""
+        ### 👤 {profile.get("username", "Student")}
+
+        **Rank:** {title}
+
+        **Level:** {level}
+
+        **XP:** {profile.get("xp", 0)}
+
+        **Missions completed:**
+        {profile.get("missions_completed", 0)}
+
+        **Badges:**
+        {profile.get("badges", 0)}
+
+        **Streak:**
+        {profile.get("streak", 0)} days
         """
     )
+
+
+# =========================================================
+# MAIN APP
+# =========================================================
+
+if not st.session_state.user:
+
+    login_page()
+
+else:
+
+    if not st.session_state.profile:
+
+        st.session_state.profile = load_profile()
+
+    if not st.session_state.profile:
+
+        st.error(
+            "Could not load your student profile."
+        )
+
+        st.stop()
+
+    sidebar()
+
+    page = st.session_state.page
+
+    if page == "Home":
+        home_page()
+
+    elif page == "Progress":
+        progress_page()
+
+    elif page == "Profile":
+        profile_page()
+
+    elif page == "Drug Detective":
+        drug_detective()
+
+    elif page == "Patient Case":
+        patient_case()
+
+    elif page == "AI Patient":
+        ai_patient()
+
+    elif page == "AI Quiz":
+        ai_quiz()
+
+    elif page == "Pharma Battle":
+
+        placeholder_game(
+            "Pharma Battle",
+            "⚔️",
+            "Challenge your pharmacy knowledge.",
+            100
+        )
+
+    elif page == "Escape Room":
+
+        placeholder_game(
+            "Escape Room",
+            "🔐",
+            "Solve pharmacy puzzles and escape.",
+            100
+        )
+
+    elif page == "Build the Patient":
+
+        placeholder_game(
+            "Build the Patient",
+            "🧬",
+            "Build a patient profile and treatment strategy.",
+            80
+        )
+
+    elif page == "Daily Challenge":
+
+        placeholder_game(
+            "Daily Challenge",
+            "🔥",
+            "Complete today's pharmacy challenge.",
+            50
+        )
