@@ -1,6 +1,8 @@
 import streamlit as st
 from google import genai
 from supabase import create_client
+import json
+import re
 
 
 # ============================================================
@@ -28,28 +30,23 @@ DEFAULTS = {
     # Drug Detective
     "drug_case": None,
     "drug_feedback": None,
-    "drug_answered": False,
 
     # Patient Case
-    "patient_case": None,
+    "patient_case_data": None,
     "patient_feedback": None,
-    "patient_answered": False,
 
     # AI Patient
     "patient_condition": None,
-    "patient_history": [],
+    "patient_messages": [],
 
     # Quiz
-    "quiz_questions": None,
+    "quiz_data": None,
     "quiz_answers": {},
     "quiz_submitted": False,
-    "quiz_score": None,
 
-    # Demo games
-    "battle_answered": False,
-    "escape_answered": False,
-    "build_answered": False,
-    "daily_answered": False,
+    # Generic missions
+    "generic_mission": None,
+    "generic_feedback": None,
 }
 
 for key, value in DEFAULTS.items():
@@ -95,26 +92,25 @@ def get_gemini():
         return None
 
 
-# ============================================================
-# GEMINI REQUEST
-# ============================================================
-
-def ask_gemini(prompt):
+def ask_ai(prompt):
 
     client = get_gemini()
 
     if not client:
         raise Exception(
-            "GEMINI_API_KEY is missing from Streamlit Secrets."
+            "Gemini API is not configured. "
+            "Please check GEMINI_API_KEY in Streamlit Secrets."
         )
 
-    # Current Gemini Interactions API
-    interaction = client.interactions.create(
+    response = client.models.generate_content(
         model="gemini-3.6-flash",
-        input=prompt
+        contents=prompt
     )
 
-    return interaction.output_text
+    if not response or not response.text:
+        raise Exception("Gemini returned an empty response.")
+
+    return response.text.strip()
 
 
 # ============================================================
@@ -126,43 +122,37 @@ def get_level_info(xp):
     if xp < 500:
         return 1, "Pharma Initiate", 500
 
-    elif xp < 1200:
+    if xp < 1200:
         return 2, "Drug Seeker", 1200
 
-    elif xp < 2500:
+    if xp < 2500:
         return 3, "Pharma Strategist", 2500
 
-    elif xp < 4500:
+    if xp < 4500:
         return 4, "Clinical Specialist", 4500
 
-    elif xp < 7000:
+    if xp < 7000:
         return 5, "Therapeutics Master", 7000
 
-    else:
-        return 6, "PharmaQuest Elite", 10000
+    return 6, "PharmaQuest Elite", 10000
 
 
 # ============================================================
-# LOAD PROFILE
+# PROFILE
 # ============================================================
 
 def load_profile():
 
-    if not supabase:
-        return None
-
-    if not st.session_state.user:
+    if not supabase or not st.session_state.user:
         return None
 
     try:
-
-        user_id = st.session_state.user.id
 
         result = (
             supabase
             .table("profiles")
             .select("*")
-            .eq("id", user_id)
+            .eq("id", st.session_state.user.id)
             .execute()
         )
 
@@ -174,10 +164,6 @@ def load_profile():
 
     return None
 
-
-# ============================================================
-# CREATE PROFILE
-# ============================================================
 
 def create_profile(user, username):
 
@@ -218,10 +204,7 @@ def create_profile(user, username):
 
 def save_progress(xp_add=0, mission_complete=False):
 
-    if not supabase:
-        return
-
-    if not st.session_state.user:
+    if not supabase or not st.session_state.user:
         return
 
     profile = st.session_state.profile
@@ -231,23 +214,22 @@ def save_progress(xp_add=0, mission_complete=False):
 
     try:
 
-        current_xp = profile.get("xp", 0)
-        current_missions = profile.get(
-            "missions_completed",
-            0
+        current_xp = int(profile.get("xp", 0))
+        missions = int(
+            profile.get("missions_completed", 0)
         )
 
         new_xp = current_xp + xp_add
 
         if mission_complete:
-            current_missions += 1
+            missions += 1
 
         level, _, _ = get_level_info(new_xp)
 
         update_data = {
             "xp": new_xp,
             "level": level,
-            "missions_completed": current_missions,
+            "missions_completed": missions
         }
 
         result = (
@@ -267,7 +249,7 @@ def save_progress(xp_add=0, mission_complete=False):
     except Exception as e:
 
         st.error(
-            f"Could not save progress: {str(e)}"
+            f"Could not save progress: {e}"
         )
 
 
@@ -278,40 +260,39 @@ def save_progress(xp_add=0, mission_complete=False):
 def logout():
 
     try:
-
         if supabase:
             supabase.auth.sign_out()
-
     except Exception:
         pass
 
     st.session_state.user = None
     st.session_state.profile = None
     st.session_state.page = "Home"
-    st.session_state.login_mode = "login"
 
     st.rerun()
 
 
 # ============================================================
 # PROFESSIONAL CSS
+#
+# IMPORTANT:
+# This CSS contains ONLY styling.
+# All visible interface text below is produced with
+# normal Streamlit components, so HTML code cannot appear
+# as visible text.
 # ============================================================
 
 st.markdown(
     """
 <style>
 
-/* ============================================================
-   GLOBAL
-   ============================================================ */
-
 .stApp {
     background:
         linear-gradient(
             135deg,
             #f8fafc 0%,
-            #f5f3ff 45%,
-            #ffffff 100%
+            #f5f3ff 48%,
+            #fff7ed 100%
         );
 }
 
@@ -330,18 +311,10 @@ footer {
 }
 
 
-/* ============================================================
-   SIDEBAR
-   ============================================================ */
+/* SIDEBAR */
 
 section[data-testid="stSidebar"] {
-    background:
-        linear-gradient(
-            180deg,
-            #ffffff 0%,
-            #faf9ff 100%
-        );
-
+    background: #ffffff;
     border-right: 1px solid #e5e7eb;
 }
 
@@ -349,605 +322,113 @@ section[data-testid="stSidebar"] > div {
     padding-top: 1.2rem;
 }
 
-section[data-testid="stSidebar"] .stButton {
-    margin-bottom: 5px;
-}
-
 section[data-testid="stSidebar"] .stButton button {
     width: 100%;
     min-height: 43px;
-
-    border-radius: 12px;
-
-    background: transparent;
-
+    border-radius: 11px;
     border: 1px solid transparent;
-
+    background: transparent;
     color: #334155;
-
-    font-weight: 650;
-
+    font-weight: 600;
     text-align: left;
-
-    transition: all 0.2s ease;
 }
 
 section[data-testid="stSidebar"] .stButton button:hover {
     background: #f3f0ff;
-
     border-color: #ddd6fe;
-
     color: #6d28d9;
-
-    transform: translateX(2px);
 }
 
 
-/* ============================================================
-   SIDEBAR BRAND
-   ============================================================ */
+/* HERO */
 
-.sidebar-brand {
-    padding: 10px 4px 14px 4px;
-}
-
-.sidebar-brand-icon {
-    width: 48px;
-    height: 48px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    border-radius: 14px;
-
+.hero-container {
+    padding: 2.5rem;
+    border-radius: 25px;
     background:
         linear-gradient(
             135deg,
-            #7c3aed,
-            #c026d3
+            #6d28d9,
+            #9333ea 48%,
+            #db2777
         );
-
     color: white;
-
-    font-size: 25px;
-
     box-shadow:
-        0 8px 20px rgba(124,58,237,0.20);
-
-    margin-bottom: 10px;
-}
-
-.sidebar-brand-title {
-    font-size: 21px;
-    font-weight: 850;
-    color: #1e293b;
-}
-
-.sidebar-brand-subtitle {
-    font-size: 12px;
-    color: #64748b;
-    margin-top: 2px;
-}
-
-
-/* ============================================================
-   USER PANEL
-   ============================================================ */
-
-.user-panel {
-    background: #ffffff;
-
-    border: 1px solid #e2e8f0;
-
-    border-radius: 16px;
-
-    padding: 14px;
-
-    margin-bottom: 12px;
-
-    box-shadow:
-        0 6px 20px rgba(15,23,42,0.04);
-}
-
-.user-name {
-    font-size: 15px;
-    font-weight: 800;
-    color: #1e293b;
-}
-
-.user-rank {
-    font-size: 12px;
-    color: #64748b;
-    margin-top: 3px;
-}
-
-
-/* ============================================================
-   LOGIN
-   ============================================================ */
-
-.login-card {
-    background: #ffffff;
-
-    border: 1px solid #e5e7eb;
-
-    border-radius: 24px;
-
-    padding: 2.2rem;
-
-    box-shadow:
-        0 20px 55px rgba(15,23,42,0.08);
-}
-
-.login-brand {
-    text-align: center;
-    margin-bottom: 20px;
-}
-
-.login-icon {
-    width: 70px;
-    height: 70px;
-
-    margin: 0 auto 15px auto;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    border-radius: 20px;
-
-    background:
-        linear-gradient(
-            135deg,
-            #7c3aed,
-            #c026d3
-        );
-
-    font-size: 34px;
-
-    box-shadow:
-        0 12px 30px rgba(124,58,237,0.22);
-}
-
-.login-title {
-    font-size: 30px;
-    font-weight: 850;
-    color: #1e293b;
-}
-
-.login-subtitle {
-    color: #64748b;
-    font-size: 14px;
-    margin-top: 5px;
-}
-
-
-/* ============================================================
-   HERO
-   ============================================================ */
-
-.hero-box {
-    position: relative;
-
-    overflow: hidden;
-
-    background:
-        linear-gradient(
-            135deg,
-            #5b21b6,
-            #7c3aed 45%,
-            #c026d3
-        );
-
-    padding: 2.6rem;
-
-    border-radius: 26px;
-
-    color: white;
-
-    box-shadow:
-        0 22px 50px rgba(91,33,182,0.20);
-
+        0 20px 50px rgba(109, 40, 217, 0.20);
     margin-bottom: 1.5rem;
 }
 
-.hero-box::after {
-    content: "";
-
-    position: absolute;
-
-    width: 220px;
-    height: 220px;
-
-    right: -70px;
-    top: -90px;
-
-    border-radius: 50%;
-
-    background: rgba(255,255,255,0.10);
+.hero-container h1 {
+    color: white;
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
 }
 
-.hero-box h1 {
-    position: relative;
-    z-index: 2;
-
-    font-size: 2.2rem;
-    font-weight: 850;
-
-    margin-bottom: 8px;
-}
-
-.hero-box p {
-    position: relative;
-    z-index: 2;
-
-    font-size: 1rem;
-
-    opacity: 0.94;
-
-    max-width: 760px;
+.hero-container p {
+    color: rgba(255,255,255,0.9);
+    font-size: 1.05rem;
 }
 
 
-/* ============================================================
-   STAT CARDS
-   ============================================================ */
+/* STAT CARDS */
 
-.stat-box {
-    background: #ffffff;
-
+.stat-card {
+    background: white;
     border: 1px solid #e5e7eb;
-
     border-radius: 18px;
-
-    padding: 1.25rem;
-
+    padding: 1.3rem;
+    min-height: 120px;
     box-shadow:
         0 8px 25px rgba(15,23,42,0.05);
-
-    min-height: 115px;
-
-    transition: all 0.2s ease;
 }
 
-.stat-box:hover {
-    transform: translateY(-3px);
-
+.stat-card:hover {
+    border-color: #c4b5fd;
     box-shadow:
-        0 15px 35px rgba(15,23,42,0.08);
-}
-
-.stat-icon {
-    font-size: 22px;
-    margin-bottom: 6px;
+        0 12px 30px rgba(109,40,217,0.10);
 }
 
 .stat-label {
     color: #64748b;
-
-    font-size: 0.76rem;
-
-    font-weight: 750;
-
+    font-size: 0.78rem;
+    font-weight: 700;
     text-transform: uppercase;
-
     letter-spacing: 0.05em;
 }
 
 .stat-value {
     color: #1e293b;
-
-    font-size: 1.75rem;
-
-    font-weight: 850;
-
-    margin-top: 4px;
-}
-
-
-/* ============================================================
-   SECTION HEADINGS
-   ============================================================ */
-
-.section-heading {
-    font-size: 1.65rem;
-
-    font-weight: 850;
-
-    color: #1e293b;
-
-    margin-top: 2rem;
-
-    margin-bottom: 4px;
-}
-
-.section-description {
-    color: #64748b;
-
-    margin-bottom: 1.2rem;
-}
-
-
-/* ============================================================
-   GAME CARDS
-   ============================================================ */
-
-.game-card {
-    background: #ffffff;
-
-    border: 1px solid #e2e8f0;
-
-    border-radius: 20px;
-
-    padding: 1.35rem;
-
-    min-height: 245px;
-
-    box-shadow:
-        0 8px 25px rgba(15,23,42,0.045);
-
-    transition: all 0.22s ease;
-}
-
-.game-card:hover {
-    transform: translateY(-5px);
-
-    border-color: #c4b5fd;
-
-    box-shadow:
-        0 18px 38px rgba(91,33,182,0.11);
-}
-
-.game-icon {
-    width: 52px;
-    height: 52px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    border-radius: 15px;
-
-    background: #f3f0ff;
-
-    border: 1px solid #ddd6fe;
-
-    font-size: 25px;
-
-    margin-bottom: 15px;
-}
-
-.game-title {
-    font-size: 1.18rem;
-
-    font-weight: 850;
-
-    color: #1e293b;
-
-    margin-bottom: 7px;
-}
-
-.game-description {
-    color: #64748b;
-
-    font-size: 0.91rem;
-
-    line-height: 1.55;
-
-    min-height: 64px;
-}
-
-.game-reward {
-    color: #7c3aed;
-
-    font-size: 0.82rem;
-
-    font-weight: 750;
-
-    margin-top: 12px;
-
-    margin-bottom: 10px;
-}
-
-
-/* ============================================================
-   GAME HEADER
-   ============================================================ */
-
-.game-title-box {
-    background: #ffffff;
-
-    border: 1px solid #e2e8f0;
-
-    border-radius: 22px;
-
-    padding: 2rem;
-
-    box-shadow:
-        0 10px 30px rgba(15,23,42,0.05);
-
-    margin-bottom: 1.5rem;
-}
-
-.game-title-icon {
-    width: 58px;
-    height: 58px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    border-radius: 16px;
-
-    background:
-        linear-gradient(
-            135deg,
-            #f3f0ff,
-            #fae8ff
-        );
-
-    border: 1px solid #ddd6fe;
-
-    font-size: 28px;
-
-    margin-bottom: 14px;
-}
-
-.game-title-box h1 {
-    color: #1e293b;
-
-    font-size: 2rem;
-
-    font-weight: 850;
-
-    margin-bottom: 6px;
-}
-
-.game-title-box p {
-    color: #64748b;
-
-    font-size: 0.98rem;
-}
-
-
-/* ============================================================
-   MISSION BOX
-   ============================================================ */
-
-.mission-box {
-    background: #ffffff;
-
-    border: 1px solid #e2e8f0;
-
-    border-radius: 20px;
-
-    padding: 1.5rem;
-
-    box-shadow:
-        0 8px 25px rgba(15,23,42,0.045);
-
-    margin-bottom: 1.2rem;
-}
-
-.mission-label {
-    color: #7c3aed;
-
-    font-size: 0.75rem;
-
+    font-size: 1.8rem;
     font-weight: 800;
-
-    letter-spacing: 0.08em;
-
-    text-transform: uppercase;
-
-    margin-bottom: 7px;
-}
-
-.mission-question {
-    color: #1e293b;
-
-    font-size: 1.1rem;
-
-    font-weight: 750;
-
-    line-height: 1.55;
+    margin-top: 7px;
 }
 
 
-/* ============================================================
-   FEEDBACK
-   ============================================================ */
+/* GAME CARDS */
 
-.feedback-good {
-    background: #ecfdf5;
-
-    border: 1px solid #a7f3d0;
-
-    color: #065f46;
-
-    border-radius: 16px;
-
-    padding: 1rem 1.2rem;
-
-    margin-top: 1rem;
-}
-
-.feedback-bad {
-    background: #fff7ed;
-
-    border: 1px solid #fed7aa;
-
-    color: #9a3412;
-
-    border-radius: 16px;
-
-    padding: 1rem 1.2rem;
-
-    margin-top: 1rem;
-}
-
-
-/* ============================================================
-   PROGRESS
-   ============================================================ */
-
-.progress-box {
-    background: #ffffff;
-
-    border: 1px solid #e2e8f0;
-
-    border-radius: 18px;
-
-    padding: 1.4rem;
-
-    margin-top: 1.5rem;
-
+div[data-testid="stVerticalBlockBorderWrapper"] {
+    border-radius: 20px !important;
+    border: 1px solid #e2e8f0 !important;
+    background: rgba(255,255,255,0.96);
     box-shadow:
-        0 8px 25px rgba(15,23,42,0.04);
+        0 8px 25px rgba(15,23,42,0.05);
+    transition: 0.2s ease;
 }
 
-
-/* ============================================================
-   INPUTS
-   ============================================================ */
-
-.stTextInput input,
-.stTextArea textarea {
-    border-radius: 11px !important;
-
-    border: 1px solid #cbd5e1 !important;
-}
-
-.stTextInput input:focus,
-.stTextArea textarea:focus {
-    border-color: #8b5cf6 !important;
-
+div[data-testid="stVerticalBlockBorderWrapper"]:hover {
+    border-color: #c4b5fd !important;
     box-shadow:
-        0 0 0 2px rgba(139,92,246,0.12) !important;
+        0 15px 35px rgba(109,40,217,0.10);
 }
 
 
-/* ============================================================
-   BUTTONS
-   ============================================================ */
+/* BUTTONS */
 
 .stButton button {
     border-radius: 11px;
-
+    font-weight: 700;
     min-height: 42px;
-
-    font-weight: 750;
-
-    transition: all 0.18s ease;
 }
-
-.stButton button:hover {
-    transform: translateY(-1px);
-}
-
-
-/* PRIMARY */
 
 .stButton button[kind="primary"] {
     background:
@@ -956,9 +437,7 @@ section[data-testid="stSidebar"] .stButton button:hover {
             #7c3aed,
             #a855f7
         );
-
     border: none;
-
     color: white;
 }
 
@@ -969,46 +448,69 @@ section[data-testid="stSidebar"] .stButton button:hover {
             #6d28d9,
             #9333ea
         );
-
-    color: white;
 }
 
 
-/* ============================================================
-   ANSWER AREA
-   ============================================================ */
+/* INPUTS */
 
-.answer-box {
-    background: #faf9ff;
+.stTextInput input,
+.stTextArea textarea {
+    border-radius: 10px;
+    border: 1px solid #cbd5e1;
+}
 
-    border: 1px solid #ddd6fe;
-
-    border-radius: 18px;
-
-    padding: 1.2rem;
-
-    margin-top: 1rem;
+.stTextInput input:focus,
+.stTextArea textarea:focus {
+    border-color: #8b5cf6;
+    box-shadow: 0 0 0 2px rgba(139,92,246,0.12);
 }
 
 
-/* ============================================================
-   MOBILE
-   ============================================================ */
+/* MISSION HEADER */
 
-@media (max-width: 800px) {
+.mission-panel {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 22px;
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+    box-shadow:
+        0 10px 30px rgba(15,23,42,0.05);
+}
 
-    .hero-box {
-        padding: 1.6rem;
-    }
 
-    .hero-box h1 {
-        font-size: 1.7rem;
-    }
+/* LOGIN */
 
-    .game-title-box {
-        padding: 1.4rem;
-    }
+.login-panel {
+    background: white;
+    padding: 2.3rem;
+    border-radius: 22px;
+    border: 1px solid #e5e7eb;
+    box-shadow:
+        0 15px 40px rgba(15,23,42,0.08);
+}
 
+
+/* ANSWER BOX */
+
+.answer-panel {
+    background: #fafafa;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 1.3rem;
+}
+
+
+/* BADGES */
+
+.badge {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: #f3e8ff;
+    color: #7e22ce;
+    font-weight: 700;
+    font-size: 0.8rem;
 }
 
 </style>
@@ -1023,98 +525,214 @@ section[data-testid="stSidebar"] .stButton button:hover {
 
 def login_page():
 
-    left, center, right = st.columns([1, 1.25, 1])
+    st.write("")
+
+    left, center, right = st.columns(
+        [1, 1.25, 1]
+    )
 
     with center:
 
         st.markdown(
-            """
-            <div class="login-brand">
-                <div class="login-icon">💊</div>
-                <div class="login-title">PharmaQuest</div>
-                <div class="login-subtitle">
-                    Learn Pharmacy • Solve Cases • Build Clinical Confidence
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
+            "## 💊 PharmaQuest"
         )
 
-        with st.container(border=True):
+        st.caption(
+            "Learn Pharmacy • Solve Cases • Build Clinical Confidence"
+        )
 
-            if st.session_state.login_mode == "login":
+        st.divider()
 
-                st.subheader("Welcome back")
+        if st.session_state.login_mode == "login":
 
-                st.caption(
-                    "Sign in to continue your pharmacy learning journey."
-                )
+            st.subheader("Welcome back")
 
-                email = st.text_input(
-                    "Email",
-                    placeholder="student@example.com",
-                    key="login_email"
-                )
+            st.write(
+                "Sign in to continue your pharmacy learning journey."
+            )
 
-                password = st.text_input(
-                    "Password",
-                    type="password",
-                    key="login_password"
-                )
+            email = st.text_input(
+                "Email",
+                placeholder="student@example.com",
+                key="login_email"
+            )
 
-                if st.button(
-                    "Sign in to PharmaQuest",
-                    type="primary",
-                    use_container_width=True
-                ):
+            password = st.text_input(
+                "Password",
+                type="password",
+                key="login_password"
+            )
 
-                    if not email or not password:
+            if st.button(
+                "Sign in to PharmaQuest",
+                type="primary",
+                use_container_width=True
+            ):
 
-                        st.error(
-                            "Please enter your email and password."
+                if not email or not password:
+
+                    st.error(
+                        "Please enter your email and password."
+                    )
+
+                elif not supabase:
+
+                    st.error(
+                        "Supabase is not connected. "
+                        "Check Streamlit Secrets."
+                    )
+
+                else:
+
+                    try:
+
+                        result = (
+                            supabase
+                            .auth
+                            .sign_in_with_password(
+                                {
+                                    "email": email,
+                                    "password": password
+                                }
+                            )
                         )
 
-                    elif not supabase:
+                        if result.user:
 
-                        st.error(
-                            "Supabase is not connected. Check your Streamlit Secrets."
-                        )
+                            st.session_state.user = result.user
 
-                    else:
+                            profile = load_profile()
 
-                        try:
+                            if not profile:
 
-                            result = (
-                                supabase
-                                .auth
-                                .sign_in_with_password(
-                                    {
-                                        "email": email,
-                                        "password": password
-                                    }
+                                username = (
+                                    result.user.user_metadata.get(
+                                        "username"
+                                    )
+                                    or email.split("@")[0]
                                 )
+
+                                profile = create_profile(
+                                    result.user,
+                                    username
+                                )
+
+                            st.session_state.profile = profile
+                            st.session_state.page = "Home"
+
+                            st.rerun()
+
+                        else:
+
+                            st.error(
+                                "Login failed."
                             )
 
-                            if result.user:
+                    except Exception as e:
+
+                        st.error(
+                            f"Login failed: {e}"
+                        )
+
+            st.divider()
+
+            if st.button(
+                "Create a new account",
+                use_container_width=True
+            ):
+
+                st.session_state.login_mode = "signup"
+
+                st.rerun()
+
+        else:
+
+            st.subheader("Create your account")
+
+            st.write(
+                "Create your own profile and save your learning progress."
+            )
+
+            username = st.text_input(
+                "Username",
+                placeholder="e.g. Aiman",
+                key="signup_username"
+            )
+
+            email = st.text_input(
+                "Email",
+                placeholder="student@example.com",
+                key="signup_email"
+            )
+
+            password = st.text_input(
+                "Password",
+                type="password",
+                key="signup_password"
+            )
+
+            confirm = st.text_input(
+                "Confirm password",
+                type="password",
+                key="signup_confirm"
+            )
+
+            if st.button(
+                "Create my PharmaQuest account",
+                type="primary",
+                use_container_width=True
+            ):
+
+                if not username or not email or not password:
+
+                    st.error(
+                        "Please complete all fields."
+                    )
+
+                elif password != confirm:
+
+                    st.error(
+                        "Passwords do not match."
+                    )
+
+                elif len(password) < 6:
+
+                    st.error(
+                        "Password must contain at least 6 characters."
+                    )
+
+                elif not supabase:
+
+                    st.error(
+                        "Supabase is not connected."
+                    )
+
+                else:
+
+                    try:
+
+                        result = supabase.auth.sign_up(
+                            {
+                                "email": email,
+                                "password": password,
+                                "options": {
+                                    "data": {
+                                        "username": username
+                                    }
+                                }
+                            }
+                        )
+
+                        if result.user:
+
+                            if result.session:
+
+                                profile = create_profile(
+                                    result.user,
+                                    username
+                                )
 
                                 st.session_state.user = result.user
-
-                                profile = load_profile()
-
-                                if not profile:
-
-                                    username = (
-                                        result.user.user_metadata.get(
-                                            "username"
-                                        )
-                                        or email.split("@")[0]
-                                    )
-
-                                    profile = create_profile(
-                                        result.user,
-                                        username
-                                    )
-
                                 st.session_state.profile = profile
                                 st.session_state.page = "Home"
 
@@ -1122,153 +740,33 @@ def login_page():
 
                             else:
 
-                                st.error(
-                                    "Login failed."
+                                st.success(
+                                    "Account created. "
+                                    "Confirm your email, then sign in."
                                 )
 
-                        except Exception as e:
+                        else:
 
                             st.error(
-                                f"Login failed: {str(e)}"
+                                "Could not create account."
                             )
 
-                st.divider()
-
-                st.write(
-                    "Don't have an account?"
-                )
-
-                if st.button(
-                    "Create a new account",
-                    use_container_width=True
-                ):
-
-                    st.session_state.login_mode = "signup"
-
-                    st.rerun()
-
-            else:
-
-                st.subheader("Create your account")
-
-                st.caption(
-                    "Create your own profile and save your learning progress."
-                )
-
-                username = st.text_input(
-                    "Username",
-                    placeholder="e.g. Aiman",
-                    key="signup_username"
-                )
-
-                email = st.text_input(
-                    "Email",
-                    placeholder="student@example.com",
-                    key="signup_email"
-                )
-
-                password = st.text_input(
-                    "Password",
-                    type="password",
-                    key="signup_password"
-                )
-
-                confirm_password = st.text_input(
-                    "Confirm password",
-                    type="password",
-                    key="signup_confirm"
-                )
-
-                if st.button(
-                    "Create my account",
-                    type="primary",
-                    use_container_width=True
-                ):
-
-                    if not username or not email or not password:
+                    except Exception as e:
 
                         st.error(
-                            "Please complete all fields."
+                            f"Signup failed: {e}"
                         )
 
-                    elif password != confirm_password:
+            st.divider()
 
-                        st.error(
-                            "Passwords do not match."
-                        )
+            if st.button(
+                "← Back to login",
+                use_container_width=True
+            ):
 
-                    elif len(password) < 6:
+                st.session_state.login_mode = "login"
 
-                        st.error(
-                            "Password must contain at least 6 characters."
-                        )
-
-                    elif not supabase:
-
-                        st.error(
-                            "Supabase is not connected."
-                        )
-
-                    else:
-
-                        try:
-
-                            result = supabase.auth.sign_up(
-                                {
-                                    "email": email,
-                                    "password": password,
-                                    "options": {
-                                        "data": {
-                                            "username": username
-                                        }
-                                    }
-                                }
-                            )
-
-                            if result.user:
-
-                                if result.session:
-
-                                    profile = create_profile(
-                                        result.user,
-                                        username
-                                    )
-
-                                    st.session_state.user = result.user
-                                    st.session_state.profile = profile
-                                    st.session_state.page = "Home"
-
-                                    st.rerun()
-
-                                else:
-
-                                    st.success(
-                                        "Account created. "
-                                        "Please confirm your email and then log in."
-                                    )
-
-                            else:
-
-                                st.error(
-                                    "Could not create the account."
-                                )
-
-                        except Exception as e:
-
-                            st.error(
-                                f"Signup failed: {str(e)}"
-                            )
-
-                st.divider()
-
-                if st.button(
-                    "← Back to login",
-                    use_container_width=True
-                ):
-
-                    st.session_state.login_mode = "login"
-
-                    st.rerun()
+                st.rerun()
 
 
 # ============================================================
@@ -1284,50 +782,39 @@ def sidebar():
         "Student"
     )
 
-    xp = profile.get(
-        "xp",
-        0
+    xp = int(
+        profile.get("xp", 0)
     )
 
     level, title, next_xp = get_level_info(xp)
 
     with st.sidebar:
 
-        # IMPORTANT:
-        # This HTML is inside st.markdown and unsafe_allow_html=True.
-        # Therefore it will render as HTML instead of appearing as code.
+        st.title("💊 PharmaQuest")
 
-        st.markdown(
-            """
-            <div class="sidebar-brand">
-                <div class="sidebar-brand-icon">💊</div>
-                <div class="sidebar-brand-title">PharmaQuest</div>
-                <div class="sidebar-brand-subtitle">
-                    Pharmacy Learning Arena
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
+        st.caption(
+            "Pharmacy Learning Arena"
         )
 
-        st.markdown(
-            f"""
-            <div class="user-panel">
-                <div class="user-name">👋 {username}</div>
-                <div class="user-rank">
-                    {title} • Level {level}
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
+        st.divider()
+
+        st.write(
+            f"**{username}**"
         )
 
         st.caption(
-            f"{xp} XP"
+            f"{title} • Level {level}"
         )
 
-        st.progress(
-            min((xp % 500) / 500, 1)
+        progress = min(
+            (xp % 500) / 500,
+            1
+        )
+
+        st.progress(progress)
+
+        st.caption(
+            f"{xp} XP"
         )
 
         st.divider()
@@ -1335,7 +822,7 @@ def sidebar():
         st.caption("MAIN")
 
         if st.button(
-            "⌂   Home Dashboard",
+            "🏠  Home Dashboard",
             use_container_width=True
         ):
 
@@ -1343,7 +830,7 @@ def sidebar():
             st.rerun()
 
         if st.button(
-            "◈   My Progress",
+            "📊  My Progress",
             use_container_width=True
         ):
 
@@ -1355,20 +842,19 @@ def sidebar():
         st.caption("PLAY & PRACTICE")
 
         games = [
-            ("⌕   Drug Detective", "Drug Detective"),
-            ("✚   Patient Case", "Patient Case"),
-            ("◉   AI Patient", "AI Patient"),
-            ("⚔   Pharma Battle", "Pharma Battle"),
-            ("▣   Escape Room", "Escape Room"),
-            ("◈   Build the Patient", "Build the Patient"),
+            ("🕵️  Drug Detective", "Drug Detective"),
+            ("🩺  Patient Case", "Patient Case"),
+            ("🗣️  AI Patient", "AI Patient"),
+            ("⚔️  Pharma Battle", "Pharma Battle"),
+            ("🔐  Escape Room", "Escape Room"),
+            ("🧬  Build the Patient", "Build the Patient"),
         ]
 
         for label, page in games:
 
             if st.button(
                 label,
-                use_container_width=True,
-                key=f"side_{page}"
+                use_container_width=True
             ):
 
                 st.session_state.page = page
@@ -1379,7 +865,7 @@ def sidebar():
         st.caption("LEARN")
 
         if st.button(
-            "✦   AI Quiz",
+            "🧠  AI Quiz",
             use_container_width=True
         ):
 
@@ -1387,7 +873,7 @@ def sidebar():
             st.rerun()
 
         if st.button(
-            "🔥   Daily Challenge",
+            "🔥  Daily Challenge",
             use_container_width=True
         ):
 
@@ -1399,7 +885,7 @@ def sidebar():
         st.caption("ACCOUNT")
 
         if st.button(
-            "♛   My Profile",
+            "🏆  My Profile",
             use_container_width=True
         ):
 
@@ -1407,7 +893,7 @@ def sidebar():
             st.rerun()
 
         if st.button(
-            "↪   Logout",
+            "🚪  Logout",
             use_container_width=True
         ):
 
@@ -1426,43 +912,33 @@ def game_card(
     page
 ):
 
-    st.markdown(
-        f"""
-        <div class="game-card">
+    with st.container(border=True):
 
-            <div class="game-icon">
-                {icon}
-            </div>
+        st.markdown(
+            f"## {icon}"
+        )
 
-            <div class="game-title">
-                {title}
-            </div>
+        st.subheader(title)
 
-            <div class="game-description">
-                {description}
-            </div>
+        st.write(description)
 
-            <div class="game-reward">
-                ✦ +{xp} XP
-            </div>
+        st.caption(
+            f"REWARD  •  +{xp} XP"
+        )
 
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+        if st.button(
+            "Enter mission  →",
+            key=f"mission_{page}",
+            type="primary",
+            use_container_width=True
+        ):
 
-    if st.button(
-        "Open mission  →",
-        key=f"open_{page}",
-        use_container_width=True
-    ):
-
-        st.session_state.page = page
-        st.rerun()
+            st.session_state.page = page
+            st.rerun()
 
 
 # ============================================================
-# HOME DASHBOARD
+# HOME
 # ============================================================
 
 def home_page():
@@ -1474,24 +950,29 @@ def home_page():
         "Future Pharmacist"
     )
 
-    xp = profile.get(
-        "xp",
-        0
+    xp = int(
+        profile.get("xp", 0)
     )
 
-    missions = profile.get(
-        "missions_completed",
-        0
+    missions = int(
+        profile.get(
+            "missions_completed",
+            0
+        )
     )
 
-    streak = profile.get(
-        "streak",
-        0
+    streak = int(
+        profile.get(
+            "streak",
+            0
+        )
     )
 
-    badges = profile.get(
-        "badges",
-        0
+    badges = int(
+        profile.get(
+            "badges",
+            0
+        )
     )
 
     level, title, next_xp = get_level_info(xp)
@@ -1499,23 +980,24 @@ def home_page():
     # HERO
 
     st.markdown(
-        f"""
-        <div class="hero-box">
+        "## Welcome back, "
+        + username
+        + " 👋"
+    )
 
-            <h1>Welcome back, {username}</h1>
+    st.caption(
+        "Your pharmacy learning arena"
+    )
 
-            <p>
-                Build your pharmacy knowledge through
-                clinical cases, investigations and
-                interactive challenges.
-            </p>
-
-            <p>
-                <strong>{title}</strong>
-                &nbsp; • &nbsp;
-                Level {level}
-            </p>
-
+    st.markdown(
+        """
+        <div class="hero-container">
+        <h1>Build clinical confidence.</h1>
+        <p>
+        Investigate medicines, solve patient cases,
+        interview simulated patients and test your
+        pharmacy knowledge with AI-powered missions.
+        </p>
         </div>
         """,
         unsafe_allow_html=True
@@ -1525,78 +1007,46 @@ def home_page():
 
     c1, c2, c3, c4 = st.columns(4)
 
-    with c1:
+    stats = [
+        ("TOTAL XP", str(xp)),
+        ("MISSIONS", str(missions)),
+        ("STREAK", f"🔥 {streak}"),
+        ("BADGES", f"🏆 {badges}")
+    ]
 
-        st.markdown(
-            f"""
-            <div class="stat-box">
-                <div class="stat-icon">✦</div>
-                <div class="stat-label">Total XP</div>
-                <div class="stat-value">{xp}</div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+    for col, (label, value) in zip(
+        [c1, c2, c3, c4],
+        stats
+    ):
 
-    with c2:
+        with col:
 
-        st.markdown(
-            f"""
-            <div class="stat-box">
-                <div class="stat-icon">✓</div>
-                <div class="stat-label">Missions</div>
-                <div class="stat-value">{missions}</div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+            st.markdown(
+                f"""
+                <div class="stat-card">
+                    <div class="stat-label">{label}</div>
+                    <div class="stat-value">{value}</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
-    with c3:
+    st.write("")
 
-        st.markdown(
-            f"""
-            <div class="stat-box">
-                <div class="stat-icon">🔥</div>
-                <div class="stat-label">Streak</div>
-                <div class="stat-value">{streak}</div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+    st.subheader("Choose your mission")
 
-    with c4:
-
-        st.markdown(
-            f"""
-            <div class="stat-box">
-                <div class="stat-icon">♛</div>
-                <div class="stat-label">Badges</div>
-                <div class="stat-value">{badges}</div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-    # MISSIONS
-
-    st.markdown(
-        '<div class="section-heading">Choose your mission</div>',
-        unsafe_allow_html=True
+    st.caption(
+        "Every mission is designed to make you actively think, answer and learn."
     )
 
-    st.markdown(
-        '<div class="section-description">'
-        'Practice pharmacy knowledge through focused clinical challenges.'
-        '</div>',
-        unsafe_allow_html=True
-    )
+    # ROW 1
 
     c1, c2, c3 = st.columns(3)
 
     with c1:
 
         game_card(
-            "⌕",
+            "🕵️",
             "Drug Detective",
             "Investigate clinical clues and identify the mystery medicine.",
             50,
@@ -1606,9 +1056,9 @@ def home_page():
     with c2:
 
         game_card(
-            "✚",
+            "🩺",
             "Patient Case",
-            "Analyze a fictional patient and make a therapeutic decision.",
+            "Analyze a fictional patient and make a therapeutic recommendation.",
             75,
             "Patient Case"
         )
@@ -1616,21 +1066,23 @@ def home_page():
     with c3:
 
         game_card(
-            "◉",
+            "🗣️",
             "AI Patient",
             "Interview a simulated patient and practice clinical questioning.",
             60,
             "AI Patient"
         )
 
+    # ROW 2
+
     c1, c2, c3 = st.columns(3)
 
     with c1:
 
         game_card(
-            "⚔",
+            "⚔️",
             "Pharma Battle",
-            "Challenge your pharmacology and therapeutics knowledge.",
+            "Test your pharmacology knowledge through rapid clinical challenges.",
             100,
             "Pharma Battle"
         )
@@ -1638,9 +1090,9 @@ def home_page():
     with c2:
 
         game_card(
-            "▣",
+            "🔐",
             "Escape Room",
-            "Solve pharmacy puzzles and unlock the next stage.",
+            "Solve pharmacy clues and unlock the final challenge.",
             100,
             "Escape Room"
         )
@@ -1648,21 +1100,23 @@ def home_page():
     with c3:
 
         game_card(
-            "◈",
+            "🧬",
             "Build the Patient",
             "Construct a patient profile and develop a treatment strategy.",
             80,
             "Build the Patient"
         )
 
+    # ROW 3
+
     c1, c2 = st.columns(2)
 
     with c1:
 
         game_card(
-            "✦",
+            "🧠",
             "AI Quiz",
-            "Generate pharmacy MCQs, answer them and receive corrections.",
+            "Answer pharmacy MCQs and receive immediate correction.",
             40,
             "AI Quiz"
         )
@@ -1672,12 +1126,16 @@ def home_page():
         game_card(
             "🔥",
             "Daily Challenge",
-            "Complete today's pharmacy challenge and maintain your streak.",
+            "Complete a focused pharmacy challenge and earn XP.",
             50,
             "Daily Challenge"
         )
 
-    # PROGRESS
+    st.write("")
+
+    st.subheader(
+        f"Level {level} • {title}"
+    )
 
     current_start = {
         1: 0,
@@ -1702,53 +1160,32 @@ def home_page():
         min(progress, 1)
     )
 
-    st.markdown(
-        '<div class="progress-box">',
-        unsafe_allow_html=True
-    )
-
-    st.subheader(
-        f"Level {level} — {title}"
-    )
-
     st.progress(progress)
 
     st.caption(
         f"{xp} / {next_xp} XP toward the next level"
     )
 
-    st.markdown(
-        "</div>",
-        unsafe_allow_html=True
-    )
-
 
 # ============================================================
-# GAME HEADER
+# MISSION HEADER
 # ============================================================
 
-def game_header(
+def mission_header(
     icon,
     title,
     description
 ):
 
     st.markdown(
-        f"""
-        <div class="game-title-box">
-
-            <div class="game-title-icon">
-                {icon}
-            </div>
-
-            <h1>{title}</h1>
-
-            <p>{description}</p>
-
-        </div>
-        """,
-        unsafe_allow_html=True
+        f"## {icon} {title}"
     )
+
+    st.caption(
+        description
+    )
+
+    st.divider()
 
 
 # ============================================================
@@ -1757,214 +1194,210 @@ def game_header(
 
 def drug_detective():
 
-    game_header(
-        "⌕",
+    mission_header(
+        "🕵️",
         "Drug Detective",
-        "Investigate the clues, identify the medicine and receive feedback on your reasoning."
+        "Investigate the evidence, submit your hypothesis and receive AI feedback."
     )
 
-    if not st.session_state.drug_case:
+    topic = st.text_input(
+        "What should we investigate?",
+        placeholder="Example: antibiotics, asthma, hypertension, diabetes"
+    )
 
-        topic = st.text_input(
-            "What pharmacy topic should we investigate?",
-            placeholder="Example: antibiotics, diabetes, hypertension"
+    if st.button(
+        "🔎 Generate mystery",
+        type="primary"
+    ):
+
+        if not topic:
+
+            st.warning(
+                "Enter a pharmacy topic first."
+            )
+
+        else:
+
+            prompt = f"""
+You are creating a pharmacy educational mystery
+for a Pharm-D student.
+
+Topic: {topic}
+
+Create ONE fictional Drug Detective case.
+
+Return ONLY valid JSON:
+
+{{
+  "case": "short patient scenario",
+  "clue1": "clinical clue",
+  "clue2": "mechanism clue",
+  "clue3": "adverse effect clue",
+  "clue4": "patient-related clue",
+  "question": "What medicine is most likely?"
+  "answer": "correct medicine",
+  "explanation": "educational explanation"
+}}
+
+Do not make the case dangerous.
+Do not use a real patient's information.
+"""
+
+            try:
+
+                raw = ask_ai(prompt)
+
+                match = re.search(
+                    r"\{.*\}",
+                    raw,
+                    re.DOTALL
+                )
+
+                if not match:
+                    raise Exception(
+                        "AI did not return the expected format."
+                    )
+
+                data = json.loads(
+                    match.group()
+                )
+
+                st.session_state.drug_case = data
+                st.session_state.drug_feedback = None
+
+            except Exception as e:
+
+                st.error(
+                    f"Could not generate mission: {e}"
+                )
+
+    data = st.session_state.drug_case
+
+    if data:
+
+        st.subheader("Case file")
+
+        st.info(
+            data.get("case", "")
+        )
+
+        st.write(
+            f"**Evidence 01 — Clinical:** "
+            f"{data.get('clue1', '')}"
+        )
+
+        st.write(
+            f"**Evidence 02 — Mechanism:** "
+            f"{data.get('clue2', '')}"
+        )
+
+        st.write(
+            f"**Evidence 03 — Adverse effect:** "
+            f"{data.get('clue3', '')}"
+        )
+
+        st.write(
+            f"**Evidence 04 — Patient:** "
+            f"{data.get('clue4', '')}"
+        )
+
+        st.divider()
+
+        st.subheader(
+            "Your hypothesis"
+        )
+
+        answer = st.text_input(
+            data.get(
+                "question",
+                "What medicine is most likely?"
+            ),
+            key="drug_answer"
         )
 
         if st.button(
-            "Start investigation",
+            "Submit hypothesis",
             type="primary"
         ):
 
-            if not topic:
+            if not answer:
 
                 st.warning(
-                    "Enter a topic first."
+                    "Submit your answer first."
                 )
 
             else:
 
                 prompt = f"""
-You are designing a pharmacy educational mystery.
+You are grading a pharmacy student.
 
-Topic:
-{topic}
+Mystery:
+{data.get('case')}
 
-Create ONE fictional Drug Detective case for a Pharm-D student.
+Correct medicine:
+{data.get('answer')}
 
-Give:
-- Patient situation
-- Three clinical clues
-- One mechanism-of-action clue
-- One adverse-effect clue
-- One important patient clue
-- A clear question asking which medicine is most likely.
+Student answer:
+{answer}
 
-Do NOT reveal the medicine name in the case.
+Evaluate the student's answer.
 
-Do not give the answer.
+Return:
+1. Correct / Partially correct / Incorrect
+2. Why
+3. Key learning point
 
-Keep it educational and concise.
+Be encouraging but academically accurate.
 """
 
                 try:
 
-                    with st.spinner(
-                        "Creating your investigation..."
-                    ):
+                    feedback = ask_ai(prompt)
 
-                        result = ask_gemini(prompt)
-
-                    st.session_state.drug_case = result
-                    st.session_state.drug_feedback = None
-                    st.session_state.drug_answered = False
-
-                    st.rerun()
+                    st.session_state.drug_feedback = feedback
 
                 except Exception as e:
 
                     st.error(
-                        f"AI error: {str(e)}"
+                        f"Could not grade answer: {e}"
                     )
 
-    else:
+    if st.session_state.drug_feedback:
 
-        st.markdown(
-            '<div class="mission-box">',
-            unsafe_allow_html=True
+        st.divider()
+
+        st.subheader(
+            "🎓 Investigator feedback"
         )
 
-        st.markdown(
-            '<div class="mission-label">Case file</div>',
-            unsafe_allow_html=True
+        st.success(
+            st.session_state.drug_feedback
         )
 
-        st.markdown(
-            st.session_state.drug_case
+        st.info(
+            f"Correct answer: {data.get('answer')}"
         )
 
-        st.markdown(
-            "</div>",
-            unsafe_allow_html=True
+        st.write(
+            f"**Explanation:** {data.get('explanation', '')}"
         )
 
-        if not st.session_state.drug_answered:
+        if st.button(
+            "🏆 Complete mission (+50 XP)",
+            type="primary"
+        ):
 
-            answer = st.text_input(
-                "Your diagnosis / medicine answer",
-                placeholder="Type the medicine you think is correct...",
-                key="drug_student_answer"
+            save_progress(
+                xp_add=50,
+                mission_complete=True
             )
 
-            reasoning = st.text_area(
-                "Why do you think this is the answer?",
-                placeholder="Briefly explain your reasoning...",
-                key="drug_reasoning"
-            )
-
-            if st.button(
-                "Check my answer",
-                type="primary"
-            ):
-
-                if not answer:
-
-                    st.warning(
-                        "Enter your answer first."
-                    )
-
-                else:
-
-                    prompt = f"""
-You are a pharmacy professor.
-
-Below is a Drug Detective educational case:
-
-CASE:
-{st.session_state.drug_case}
-
-STUDENT ANSWER:
-{answer}
-
-STUDENT REASONING:
-{reasoning}
-
-Evaluate the student's answer.
-
-Your response must include:
-
-1. Correct / Partially Correct / Incorrect
-2. Correct medicine
-3. Why the answer is correct or incorrect
-4. Which clinical clues support the correct answer
-5. One short learning point
-
-Be encouraging and educational.
-
-Do not give unsafe personal medical advice.
-"""
-
-                    try:
-
-                        with st.spinner(
-                            "Checking your reasoning..."
-                        ):
-
-                            feedback = ask_gemini(prompt)
-
-                        st.session_state.drug_feedback = feedback
-                        st.session_state.drug_answered = True
-
-                        st.rerun()
-
-                    except Exception as e:
-
-                        st.error(
-                            f"AI error: {str(e)}"
-                        )
-
-        else:
-
-            st.subheader(
-                "Professor feedback"
-            )
-
-            st.markdown(
-                st.session_state.drug_feedback
-            )
+            st.session_state.drug_case = None
+            st.session_state.drug_feedback = None
 
             st.success(
-                "Investigation completed."
+                "Mission completed. +50 XP"
             )
-
-            if st.button(
-                "Claim +50 XP",
-                type="primary"
-            ):
-
-                save_progress(
-                    xp_add=50,
-                    mission_complete=True
-                )
-
-                st.session_state.drug_case = None
-                st.session_state.drug_feedback = None
-                st.session_state.drug_answered = False
-
-                st.success(
-                    "+50 XP added to your profile."
-                )
-
-                st.rerun()
-
-            if st.button(
-                "New investigation"
-            ):
-
-                st.session_state.drug_case = None
-                st.session_state.drug_feedback = None
-                st.session_state.drug_answered = False
-
-                st.rerun()
 
 
 # ============================================================
@@ -1973,205 +1406,226 @@ Do not give unsafe personal medical advice.
 
 def patient_case():
 
-    game_header(
-        "✚",
+    mission_header(
+        "🩺",
         "Patient Case",
-        "Analyze a fictional patient, make a therapeutic decision and receive clinical feedback."
+        "Review the patient, make a recommendation and receive clinical reasoning feedback."
     )
 
-    if not st.session_state.patient_case:
+    topic = st.text_input(
+        "Clinical topic",
+        placeholder="Example: hypertension, asthma, diabetes"
+    )
 
-        topic = st.text_input(
-            "Clinical topic",
-            placeholder="Example: asthma, hypertension, diabetes"
+    if st.button(
+        "🩺 Generate patient case",
+        type="primary"
+    ):
+
+        if not topic:
+
+            st.warning(
+                "Enter a clinical topic."
+            )
+
+        else:
+
+            prompt = f"""
+Create one fictional educational pharmacy case
+for a Pharm-D student.
+
+Topic: {topic}
+
+Return ONLY valid JSON:
+
+{{
+ "patient": "age, sex and short background",
+ "complaint": "chief complaint",
+ "history": "relevant medical history",
+ "medicines": "current medicines",
+ "findings": "important vitals/labs",
+ "question": "what should the pharmacist recommend?",
+ "ideal_answer": "best educational recommendation",
+ "reasoning": "clinical reasoning"
+}}
+
+Keep it educational and fictional.
+"""
+
+            try:
+
+                raw = ask_ai(prompt)
+
+                match = re.search(
+                    r"\{.*\}",
+                    raw,
+                    re.DOTALL
+                )
+
+                if not match:
+                    raise Exception(
+                        "Unexpected AI response."
+                    )
+
+                st.session_state.patient_case_data = json.loads(
+                    match.group()
+                )
+
+                st.session_state.patient_feedback = None
+
+            except Exception as e:
+
+                st.error(
+                    f"Could not generate case: {e}"
+                )
+
+    data = st.session_state.patient_case_data
+
+    if data:
+
+        st.subheader("Patient profile")
+
+        st.write(
+            f"**Patient:** {data.get('patient', '')}"
+        )
+
+        st.write(
+            f"**Chief complaint:** {data.get('complaint', '')}"
+        )
+
+        st.write(
+            f"**Medical history:** {data.get('history', '')}"
+        )
+
+        st.write(
+            f"**Current medicines:** {data.get('medicines', '')}"
+        )
+
+        st.write(
+            f"**Clinical findings:** {data.get('findings', '')}"
+        )
+
+        st.divider()
+
+        st.subheader(
+            "Your clinical decision"
+        )
+
+        st.write(
+            data.get(
+                "question",
+                "What should the pharmacist recommend?"
+            )
+        )
+
+        answer = st.text_area(
+            "Write your recommendation",
+            placeholder="Explain what you would recommend and why...",
+            height=150,
+            key="case_answer"
         )
 
         if st.button(
-            "Generate clinical case",
+            "Submit clinical decision",
             type="primary"
         ):
 
-            if not topic:
+            if not answer:
 
                 st.warning(
-                    "Enter a clinical topic first."
+                    "Write your recommendation first."
                 )
 
             else:
 
                 prompt = f"""
-Create a fictional pharmacy clinical case for a Pharm-D student.
+You are evaluating a Pharm-D student.
 
-Topic:
-{topic}
+Patient case:
+{data.get('patient')}
 
-Include:
-- age
-- sex
-- chief complaint
-- medical history
-- current medicines
-- relevant vital signs or laboratory information
-- important clinical clues
-- three possible therapeutic approaches
+History:
+{data.get('history')}
 
-Then ask:
-"What would you recommend and why?"
+Medicines:
+{data.get('medicines')}
 
-Do NOT reveal the correct answer.
+Findings:
+{data.get('findings')}
 
-Do not give real-person medical advice.
+Ideal educational answer:
+{data.get('ideal_answer')}
+
+Student response:
+{answer}
+
+Give structured feedback:
+
+Score out of 10:
+What the student did well:
+What was missing:
+Clinical reasoning:
+Final verdict:
+
+Do not be unnecessarily harsh.
 """
 
                 try:
 
-                    with st.spinner(
-                        "Creating clinical case..."
-                    ):
-
-                        result = ask_gemini(prompt)
-
-                    st.session_state.patient_case = result
-                    st.session_state.patient_feedback = None
-                    st.session_state.patient_answered = False
-
-                    st.rerun()
+                    st.session_state.patient_feedback = ask_ai(
+                        prompt
+                    )
 
                 except Exception as e:
 
                     st.error(
-                        f"AI error: {str(e)}"
+                        f"Could not evaluate answer: {e}"
                     )
 
-    else:
+    if st.session_state.patient_feedback:
 
-        st.markdown(
-            '<div class="mission-box">',
-            unsafe_allow_html=True
+        st.divider()
+
+        st.subheader(
+            "🎓 Clinical feedback"
         )
 
-        st.markdown(
-            '<div class="mission-label">Clinical briefing</div>',
-            unsafe_allow_html=True
+        st.write(
+            st.session_state.patient_feedback
         )
 
-        st.markdown(
-            st.session_state.patient_case
-        )
+        with st.expander(
+            "View model learning answer"
+        ):
 
-        st.markdown(
-            "</div>",
-            unsafe_allow_html=True
-        )
-
-        if not st.session_state.patient_answered:
-
-            decision = st.text_area(
-                "Your therapeutic decision",
-                placeholder=(
-                    "What would you recommend for this fictional patient "
-                    "and why?"
-                ),
-                height=140
-            )
-
-            if st.button(
-                "Submit clinical decision",
-                type="primary"
-            ):
-
-                if not decision:
-
-                    st.warning(
-                        "Write your clinical decision first."
-                    )
-
-                else:
-
-                    prompt = f"""
-You are evaluating a Pharm-D student's clinical reasoning.
-
-CASE:
-{st.session_state.patient_case}
-
-STUDENT DECISION:
-{decision}
-
-Evaluate the decision educationally.
-
-Give:
-
-1. Overall assessment
-2. What the student did well
-3. What needs improvement
-4. A more appropriate therapeutic approach
-5. Important safety considerations
-6. One key learning point
-
-Use educational language.
-
-This is a fictional educational case.
-Do not give personalized medical advice.
-"""
-
-                    try:
-
-                        with st.spinner(
-                            "Evaluating your clinical reasoning..."
-                        ):
-
-                            feedback = ask_gemini(prompt)
-
-                        st.session_state.patient_feedback = feedback
-                        st.session_state.patient_answered = True
-
-                        st.rerun()
-
-                    except Exception as e:
-
-                        st.error(
-                            f"AI error: {str(e)}"
-                        )
-
-        else:
-
-            st.subheader(
-                "Clinical feedback"
-            )
-
-            st.markdown(
-                st.session_state.patient_feedback
-            )
-
-            if st.button(
-                "Claim +75 XP",
-                type="primary"
-            ):
-
-                save_progress(
-                    xp_add=75,
-                    mission_complete=True
+            st.write(
+                data.get(
+                    "ideal_answer",
+                    ""
                 )
+            )
 
-                st.session_state.patient_case = None
-                st.session_state.patient_feedback = None
-                st.session_state.patient_answered = False
+            st.write(
+                f"**Reasoning:** "
+                f"{data.get('reasoning', '')}"
+            )
 
-                st.success(
-                    "+75 XP added."
-                )
+        if st.button(
+            "🏆 Complete case (+75 XP)",
+            type="primary"
+        ):
 
-                st.rerun()
+            save_progress(
+                xp_add=75,
+                mission_complete=True
+            )
 
-            if st.button(
-                "Start another case"
-            ):
+            st.session_state.patient_case_data = None
+            st.session_state.patient_feedback = None
 
-                st.session_state.patient_case = None
-                st.session_state.patient_feedback = None
-                st.session_state.patient_answered = False
-
-                st.rerun()
+            st.success(
+                "Clinical case completed. +75 XP"
+            )
 
 
 # ============================================================
@@ -2180,202 +1634,144 @@ Do not give personalized medical advice.
 
 def ai_patient():
 
-    game_header(
-        "◉",
+    mission_header(
+        "🗣️",
         "AI Patient",
-        "Interview a simulated patient and practice asking useful clinical questions."
+        "Interview a simulated patient. You ask the questions; the patient responds."
     )
 
-    if not st.session_state.patient_condition:
+    condition = st.text_input(
+        "Patient condition",
+        placeholder="Example: asthma, diabetes, hypertension"
+    )
 
-        condition = st.text_input(
-            "Patient condition",
-            placeholder="Example: type 2 diabetes"
-        )
+    if st.button(
+        "Start patient interview",
+        type="primary"
+    ):
 
-        if st.button(
-            "Begin patient interview",
-            type="primary"
-        ):
+        if not condition:
 
-            if not condition:
+            st.warning(
+                "Enter a condition first."
+            )
 
-                st.warning(
-                    "Enter a condition first."
-                )
+        else:
 
-            else:
+            st.session_state.patient_condition = condition
+            st.session_state.patient_messages = []
 
-                st.session_state.patient_condition = condition
-                st.session_state.patient_history = []
+            st.success(
+                "Patient interview started."
+            )
 
-                st.rerun()
-
-    else:
+    if st.session_state.patient_condition:
 
         st.info(
             f"Simulated patient condition: "
             f"{st.session_state.patient_condition}"
         )
 
-        # Conversation history
-
-        for message in st.session_state.patient_history:
+        for message in st.session_state.patient_messages:
 
             if message["role"] == "student":
 
-                with st.chat_message("user"):
-                    st.write(message["text"])
+                st.chat_message(
+                    "user"
+                ).write(
+                    message["text"]
+                )
 
             else:
 
-                with st.chat_message("assistant"):
-                    st.write(message["text"])
+                st.chat_message(
+                    "assistant"
+                ).write(
+                    message["text"]
+                )
 
-        question = st.text_input(
-            "Ask the patient",
-            placeholder="Example: When did your symptoms start?",
-            key=f"patient_question_{len(st.session_state.patient_history)}"
+        question = st.chat_input(
+            "Ask your patient a question..."
         )
 
-        if st.button(
-            "Ask patient",
-            type="primary"
-        ):
+        if question:
 
-            if not question:
+            st.session_state.patient_messages.append(
+                {
+                    "role": "student",
+                    "text": question
+                }
+            )
 
-                st.warning(
-                    "Ask a question first."
-                )
+            conversation = "\n".join(
+                [
+                    f"{m['role']}: {m['text']}"
+                    for m in st.session_state.patient_messages
+                ]
+            )
 
-            else:
-
-                conversation = "\n".join(
-                    [
-                        f"{m['role']}: {m['text']}"
-                        for m in st.session_state.patient_history
-                    ]
-                )
-
-                prompt = f"""
+            prompt = f"""
 Act as a fictional pharmacy patient.
 
 Condition:
 {st.session_state.patient_condition}
 
-Conversation so far:
+Conversation:
 {conversation}
-
-Student's latest question:
-{question}
 
 Answer ONLY as the patient.
 
 Rules:
-- Speak naturally.
-- Do not act as a doctor.
-- Do not diagnose the student.
-- Do not give a definitive treatment plan.
-- Give realistic patient information.
-- If the student asks something the patient would not know, say so.
-"""
-
-                try:
-
-                    with st.spinner(
-                        "Patient is responding..."
-                    ):
-
-                        response = ask_gemini(prompt)
-
-                    st.session_state.patient_history.append(
-                        {
-                            "role": "student",
-                            "text": question
-                        }
-                    )
-
-                    st.session_state.patient_history.append(
-                        {
-                            "role": "patient",
-                            "text": response
-                        }
-                    )
-
-                    st.rerun()
-
-                except Exception as e:
-
-                    st.error(
-                        f"AI error: {str(e)}"
-                    )
-
-        st.divider()
-
-        if st.button(
-            "End interview & get feedback"
-        ):
-
-            conversation = "\n".join(
-                [
-                    f"{m['role']}: {m['text']}"
-                    for m in st.session_state.patient_history
-                ]
-            )
-
-            prompt = f"""
-You are a pharmacy communication professor.
-
-Review this simulated patient interview:
-
-{conversation}
-
-Give:
-1. What the student did well
-2. Important questions they asked
-3. Important questions they missed
-4. How they could improve patient communication
-5. A short clinical interviewing score out of 10
-
-Keep it educational.
+- Respond naturally.
+- Give information appropriate to the question.
+- Do not diagnose the patient.
+- Do not act as the pharmacist.
+- Do not provide a treatment plan.
+- Keep the answer realistic.
 """
 
             try:
 
-                feedback = ask_gemini(prompt)
+                response = ask_ai(prompt)
 
-                st.subheader(
-                    "Interview feedback"
+                st.session_state.patient_messages.append(
+                    {
+                        "role": "patient",
+                        "text": response
+                    }
                 )
 
-                st.markdown(
-                    feedback
-                )
-
-                if st.button(
-                    "Claim +60 XP",
-                    type="primary"
-                ):
-
-                    save_progress(
-                        xp_add=60,
-                        mission_complete=True
-                    )
-
-                    st.session_state.patient_condition = None
-                    st.session_state.patient_history = []
-
-                    st.success(
-                        "+60 XP added."
-                    )
-
-                    st.rerun()
+                st.rerun()
 
             except Exception as e:
 
                 st.error(
-                    f"AI error: {str(e)}"
+                    f"AI patient error: {e}"
+                )
+
+        if st.button(
+            "🏆 Finish interview (+60 XP)",
+            type="primary"
+        ):
+
+            if len(st.session_state.patient_messages) < 2:
+
+                st.warning(
+                    "Ask a few questions before completing the interview."
+                )
+
+            else:
+
+                save_progress(
+                    xp_add=60,
+                    mission_complete=True
+                )
+
+                st.session_state.patient_condition = None
+                st.session_state.patient_messages = []
+
+                st.success(
+                    "Interview completed. +60 XP"
                 )
 
 
@@ -2385,43 +1781,41 @@ Keep it educational.
 
 def ai_quiz():
 
-    game_header(
-        "✦",
+    mission_header(
+        "🧠",
         "AI Quiz",
-        "Answer pharmacy MCQs and receive your score, corrections and explanations."
+        "Answer pharmacy MCQs and receive correction with explanations."
     )
 
-    if not st.session_state.quiz_questions:
+    topic = st.text_input(
+        "Quiz topic",
+        placeholder="Example: pharmacology, antibiotics, autonomic drugs"
+    )
 
-        topic = st.text_input(
-            "Quiz topic",
-            placeholder="Example: pharmacology, antibiotics, medicinal chemistry"
-        )
+    difficulty = st.selectbox(
+        "Difficulty",
+        [
+            "Beginner",
+            "Intermediate",
+            "Advanced"
+        ]
+    )
 
-        difficulty = st.selectbox(
-            "Difficulty",
-            [
-                "Beginner",
-                "Intermediate",
-                "Advanced"
-            ]
-        )
+    if st.button(
+        "Generate quiz",
+        type="primary"
+    ):
 
-        if st.button(
-            "Generate quiz",
-            type="primary"
-        ):
+        if not topic:
 
-            if not topic:
+            st.warning(
+                "Enter a quiz topic."
+            )
 
-                st.warning(
-                    "Enter a topic first."
-                )
+        else:
 
-            else:
-
-                prompt = f"""
-Create exactly 5 pharmacy MCQs for a Pharm-D student.
+            prompt = f"""
+Create 5 pharmacy MCQs for a Pharm-D student.
 
 Topic:
 {topic}
@@ -2429,659 +1823,333 @@ Topic:
 Difficulty:
 {difficulty}
 
-For EACH question return this exact structure:
+Return ONLY valid JSON as:
 
-QUESTION 1:
-Question text
+[
+ {{
+  "question": "...",
+  "options": [
+    "A. ...",
+    "B. ...",
+    "C. ...",
+    "D. ..."
+  ],
+  "answer": "A",
+  "explanation": "..."
+ }}
+]
 
-A) option
-B) option
-C) option
-D) option
-
-CORRECT: A
-
-EXPLANATION:
-short explanation
-
-Then repeat for questions 2 to 5.
-
-Do not add any other text.
+Make the questions academically useful.
 """
 
-                try:
+            try:
 
-                    with st.spinner(
-                        "Building your quiz..."
-                    ):
+                raw = ask_ai(prompt)
 
-                        raw = ask_gemini(prompt)
+                match = re.search(
+                    r"\[.*\]",
+                    raw,
+                    re.DOTALL
+                )
 
-                    questions = parse_quiz(raw)
-
-                    if len(questions) < 5:
-
-                        st.error(
-                            "The AI did not return a complete quiz. Please generate again."
-                        )
-
-                    else:
-
-                        st.session_state.quiz_questions = questions
-                        st.session_state.quiz_answers = {}
-                        st.session_state.quiz_submitted = False
-                        st.session_state.quiz_score = None
-
-                        st.rerun()
-
-                except Exception as e:
-
-                    st.error(
-                        f"AI error: {str(e)}"
+                if not match:
+                    raise Exception(
+                        "AI did not return valid quiz data."
                     )
 
-    else:
-
-        questions = st.session_state.quiz_questions
-
-        if not st.session_state.quiz_submitted:
-
-            for i, q in enumerate(questions):
-
-                st.markdown(
-                    f"""
-                    <div class="mission-box">
-                        <div class="mission-label">
-                            Question {i + 1}
-                        </div>
-                        <div class="mission-question">
-                            {q["question"]}
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
+                st.session_state.quiz_data = json.loads(
+                    match.group()
                 )
 
-                answer = st.radio(
-                    "Choose one answer:",
-                    [
-                        f"A) {q['A']}",
-                        f"B) {q['B']}",
-                        f"C) {q['C']}",
-                        f"D) {q['D']}",
-                    ],
-                    key=f"quiz_{i}",
-                    index=None
+                st.session_state.quiz_answers = {}
+                st.session_state.quiz_submitted = False
+
+            except Exception as e:
+
+                st.error(
+                    f"Could not generate quiz: {e}"
                 )
 
-                if answer:
+    quiz = st.session_state.quiz_data
 
-                    st.session_state.quiz_answers[i] = answer[0]
+    if quiz:
 
-            st.write("")
+        st.divider()
 
-            if st.button(
-                "Submit quiz",
-                type="primary"
-            ):
+        st.subheader(
+            "Your challenge"
+        )
 
-                if len(
-                    st.session_state.quiz_answers
-                ) < len(questions):
+        for i, question in enumerate(
+            quiz
+        ):
 
-                    st.warning(
-                        "Please answer all five questions."
+            st.write(
+                f"### Question {i + 1}"
+            )
+
+            st.write(
+                question["question"]
+            )
+
+            selected = st.radio(
+                "Choose one answer",
+                question["options"],
+                key=f"quiz_{i}",
+                label_visibility="collapsed"
+            )
+
+            st.session_state.quiz_answers[i] = selected
+
+            st.divider()
+
+        if st.button(
+            "Submit quiz",
+            type="primary"
+        ):
+
+            score = 0
+
+            for i, question in enumerate(quiz):
+
+                selected = st.session_state.quiz_answers.get(
+                    i,
+                    ""
+                )
+
+                correct_letter = question["answer"].upper()
+
+                if selected.startswith(
+                    correct_letter + "."
+                ):
+
+                    score += 1
+
+            st.session_state.quiz_submitted = True
+
+            st.success(
+                f"You scored {score} / {len(quiz)}"
+            )
+
+        if st.session_state.quiz_submitted:
+
+            st.subheader(
+                "Answer review"
+            )
+
+            for i, question in enumerate(quiz):
+
+                selected = st.session_state.quiz_answers.get(
+                    i,
+                    ""
+                )
+
+                correct = question["answer"].upper()
+
+                if selected.startswith(
+                    correct + "."
+                ):
+
+                    st.success(
+                        f"Question {i + 1}: Correct"
                     )
 
                 else:
 
-                    score = 0
+                    st.error(
+                        f"Question {i + 1}: Incorrect"
+                    )
 
-                    for i, q in enumerate(questions):
+                st.write(
+                    f"Correct answer: "
+                    f"{correct}"
+                )
 
-                        if (
-                            st.session_state.quiz_answers[i]
-                            == q["correct"]
-                        ):
+                st.caption(
+                    question["explanation"]
+                )
 
-                            score += 1
-
-                    st.session_state.quiz_score = score
-                    st.session_state.quiz_submitted = True
-
-                    st.rerun()
-
-        else:
-
-            score = st.session_state.quiz_score
-
-            st.subheader(
-                f"Your score: {score} / {len(questions)}"
+            score = sum(
+                1
+                for i, q in enumerate(quiz)
+                if st.session_state.quiz_answers.get(
+                    i,
+                    ""
+                ).startswith(
+                    q["answer"].upper() + "."
+                )
             )
 
-            if score == 5:
-
-                st.success(
-                    "Excellent! Perfect score."
-                )
-
-            elif score >= 3:
-
-                st.info(
-                    "Good work. Review the explanations below."
-                )
-
-            else:
-
-                st.warning(
-                    "Keep practicing. Review each correction carefully."
-                )
-
-            for i, q in enumerate(questions):
-
-                selected = st.session_state.quiz_answers[i]
-                correct = q["correct"]
-
-                st.markdown(
-                    f"### Question {i + 1}"
-                )
-
-                st.write(
-                    q["question"]
-                )
-
-                st.write(
-                    f"**Your answer:** {selected}"
-                )
-
-                st.write(
-                    f"**Correct answer:** {correct}"
-                )
-
-                st.info(
-                    q["explanation"]
-                )
-
-                st.divider()
+            xp = 40 + (score * 5)
 
             if st.button(
-                "Claim +40 XP",
+                f"🏆 Complete quiz (+{xp} XP)",
                 type="primary"
             ):
 
                 save_progress(
-                    xp_add=40,
+                    xp_add=xp,
                     mission_complete=True
                 )
 
-                st.session_state.quiz_questions = None
+                st.session_state.quiz_data = None
                 st.session_state.quiz_answers = {}
                 st.session_state.quiz_submitted = False
-                st.session_state.quiz_score = None
 
                 st.success(
-                    "+40 XP added."
+                    f"Quiz completed. +{xp} XP"
                 )
 
-                st.rerun()
-
-            if st.button(
-                "Generate another quiz"
-            ):
-
-                st.session_state.quiz_questions = None
-                st.session_state.quiz_answers = {}
-                st.session_state.quiz_submitted = False
-                st.session_state.quiz_score = None
-
-                st.rerun()
-
 
 # ============================================================
-# QUIZ PARSER
+# GENERIC AI MISSION
 # ============================================================
 
-def parse_quiz(text):
+def generic_ai_mission(
+    icon,
+    title,
+    description,
+    xp,
+    mission_type
+):
 
-    questions = []
+    mission_header(
+        icon,
+        title,
+        description
+    )
 
-    blocks = text.split("QUESTION ")
+    topic = st.text_input(
+        "Mission topic",
+        placeholder="Example: antibiotics, diabetes, asthma"
+    )
 
-    for block in blocks:
+    if st.button(
+        "Generate mission",
+        type="primary"
+    ):
 
-        if not block.strip():
-            continue
+        if not topic:
 
-        try:
-
-            question_part = block.split(
-                "A)"
-            )[0]
-
-            question = question_part.split(
-                ":",
-                1
-            )[1].strip()
-
-            a_part = block.split("A)", 1)[1]
-            a = a_part.split("B)", 1)[0].strip()
-
-            b_part = block.split("B)", 1)[1]
-            b = b_part.split("C)", 1)[0].strip()
-
-            c_part = block.split("C)", 1)[1]
-            c = c_part.split("D)", 1)[0].strip()
-
-            d_part = block.split("D)", 1)[1]
-
-            d = d_part.split(
-                "CORRECT:",
-                1
-            )[0].strip()
-
-            correct = (
-                block.split(
-                    "CORRECT:",
-                    1
-                )[1]
-                .split(
-                    "EXPLANATION:",
-                    1
-                )[0]
-                .strip()
-                .upper()[0]
+            st.warning(
+                "Enter a topic first."
             )
 
-            explanation = block.split(
-                "EXPLANATION:",
-                1
-            )[1].strip()
+        else:
 
-            questions.append(
-                {
-                    "question": question,
-                    "A": a,
-                    "B": b,
-                    "C": c,
-                    "D": d,
-                    "correct": correct,
-                    "explanation": explanation,
-                }
-            )
+            prompt = f"""
+Create one interactive pharmacy educational mission.
 
-        except Exception:
-            continue
+Mission type:
+{mission_type}
 
-    return questions
+Topic:
+{topic}
 
+Create:
+- a realistic fictional scenario
+- 4 useful clues
+- one clear student task
+- a correct educational answer
+- a short explanation
 
-# ============================================================
-# PHARMA BATTLE
-# ============================================================
+Do NOT immediately reveal the answer.
+"""
 
-def pharma_battle():
+            try:
 
-    game_header(
-        "⚔",
-        "Pharma Battle",
-        "Challenge your pharmacology knowledge with a rapid clinical question."
-    )
-
-    st.markdown(
-        """
-        <div class="mission-box">
-            <div class="mission-label">Battle round</div>
-            <div class="mission-question">
-                Which class of drugs is commonly used as first-line
-                maintenance therapy for many patients with hypertension?
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    answer = st.radio(
-        "Choose your answer:",
-        [
-            "A) Antihypertensive therapy",
-            "B) Antibiotics",
-            "C) Antifungals",
-            "D) Antivirals"
-        ],
-        index=None,
-        key="battle_choice"
-    )
-
-    if not st.session_state.battle_answered:
-
-        if st.button(
-            "Submit battle answer",
-            type="primary"
-        ):
-
-            if not answer:
-
-                st.warning(
-                    "Choose an answer."
+                st.session_state.generic_mission = ask_ai(
+                    prompt
                 )
 
-            elif answer.startswith("A)"):
+                st.session_state.generic_feedback = None
 
-                st.success(
-                    "Correct! In this simplified educational question, antihypertensive therapy is the appropriate category."
-                )
-
-                st.session_state.battle_answered = True
-
-            else:
+            except Exception as e:
 
                 st.error(
-                    "Not quite. Review the question and think about treatment of high blood pressure."
+                    f"Could not generate mission: {e}"
                 )
 
-                st.session_state.battle_answered = True
-
-    else:
-
-        if st.button(
-            "Claim +100 XP",
-            type="primary"
-        ):
-
-            save_progress(
-                xp_add=100,
-                mission_complete=True
-            )
-
-            st.session_state.battle_answered = False
-
-            st.success(
-                "+100 XP added."
-            )
-
-            st.rerun()
-
-
-# ============================================================
-# ESCAPE ROOM
-# ============================================================
-
-def escape_room():
-
-    game_header(
-        "▣",
-        "Escape Room",
-        "Solve pharmacy puzzles and unlock the next stage."
-    )
-
-    st.markdown(
-        """
-        <div class="mission-box">
-            <div class="mission-label">Puzzle 01</div>
-            <div class="mission-question">
-                A medicine has a very narrow therapeutic index.
-                What does this generally mean?
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    answer = st.radio(
-        "Choose the best answer:",
-        [
-            "A) It is always completely harmless",
-            "B) The effective and toxic concentrations are relatively close",
-            "C) It cannot cause adverse effects",
-            "D) It does not require monitoring"
-        ],
-        index=None,
-        key="escape_choice"
-    )
-
-    if not st.session_state.escape_answered:
-
-        if st.button(
-            "Unlock the door",
-            type="primary"
-        ):
-
-            if not answer:
-
-                st.warning(
-                    "Choose an answer."
-                )
-
-            elif answer.startswith("B)"):
-
-                st.success(
-                    "Correct. The therapeutic and toxic concentrations are relatively close."
-                )
-
-                st.session_state.escape_answered = True
-
-            else:
-
-                st.error(
-                    "Incorrect. Think about how close effective and toxic concentrations are."
-                )
-
-                st.session_state.escape_answered = True
-
-    else:
-
-        if st.button(
-            "Claim +100 XP",
-            type="primary"
-        ):
-
-            save_progress(
-                xp_add=100,
-                mission_complete=True
-            )
-
-            st.session_state.escape_answered = False
-
-            st.success(
-                "+100 XP added."
-            )
-
-            st.rerun()
-
-
-# ============================================================
-# BUILD THE PATIENT
-# ============================================================
-
-def build_patient():
-
-    game_header(
-        "◈",
-        "Build the Patient",
-        "Construct a fictional patient profile and choose the most important information to investigate."
-    )
-
-    age = st.number_input(
-        "Patient age",
-        min_value=1,
-        max_value=100,
-        value=45
-    )
-
-    symptoms = st.multiselect(
-        "Select important symptoms",
-        [
-            "Fatigue",
-            "Shortness of breath",
-            "Increased thirst",
-            "Frequent urination",
-            "Chest discomfort",
-            "Headache"
-        ]
-    )
-
-    medications = st.multiselect(
-        "Current medicines",
-        [
-            "Metformin",
-            "Amlodipine",
-            "Atorvastatin",
-            "Salbutamol",
-            "Warfarin",
-            "No current medicines"
-        ]
-    )
-
-    if not st.session_state.build_answered:
-
-        if st.button(
-            "Evaluate patient profile",
-            type="primary"
-        ):
-
-            if not symptoms:
-
-                st.warning(
-                    "Select at least one symptom."
-                )
-
-            else:
-
-                st.session_state.build_answered = True
-
-                st.success(
-                    "Patient profile created successfully."
-                )
-
-                st.info(
-                    "Next clinical step: review the patient's symptoms, "
-                    "history, medicines and relevant investigations before "
-                    "making a treatment decision."
-                )
-
-    else:
+    if st.session_state.generic_mission:
 
         st.subheader(
-            "Patient profile"
+            "Mission briefing"
         )
 
         st.write(
-            f"**Age:** {age}"
+            st.session_state.generic_mission
         )
 
-        st.write(
-            f"**Symptoms:** {', '.join(symptoms)}"
-        )
-
-        st.write(
-            f"**Medicines:** {', '.join(medications)}"
+        answer = st.text_area(
+            "Your answer",
+            placeholder="Write your reasoning or answer here...",
+            height=150
         )
 
         if st.button(
-            "Claim +80 XP",
+            "Submit answer",
             type="primary"
         ):
 
-            save_progress(
-                xp_add=80,
-                mission_complete=True
-            )
+            prompt = f"""
+You are grading a pharmacy student.
 
-            st.session_state.build_answered = False
+Mission:
+{st.session_state.generic_mission}
 
-            st.success(
-                "+80 XP added."
-            )
+Student answer:
+{answer}
 
-            st.rerun()
+Give:
+- Score out of 10
+- Correct / Partially correct / Incorrect
+- What was good
+- What should be improved
+- Correct learning point
 
+Be educational.
+"""
 
-# ============================================================
-# DAILY CHALLENGE
-# ============================================================
+            try:
 
-def daily_challenge():
-
-    game_header(
-        "🔥",
-        "Daily Challenge",
-        "Complete one focused pharmacy challenge and keep your learning momentum going."
-    )
-
-    st.markdown(
-        """
-        <div class="mission-box">
-            <div class="mission-label">Today's challenge</div>
-            <div class="mission-question">
-                A patient taking an oral medicine reports that they
-                regularly forget doses. What is the most appropriate
-                first step for a pharmacist?
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    answer = st.radio(
-        "Choose the best approach:",
-        [
-            "A) Immediately double every future dose",
-            "B) Explore the reason for missed doses and discuss adherence strategies",
-            "C) Tell the patient to stop the medicine",
-            "D) Ignore the issue"
-        ],
-        index=None,
-        key="daily_choice"
-    )
-
-    if not st.session_state.daily_answered:
-
-        if st.button(
-            "Submit challenge",
-            type="primary"
-        ):
-
-            if not answer:
-
-                st.warning(
-                    "Choose an answer."
+                st.session_state.generic_feedback = ask_ai(
+                    prompt
                 )
 
-            elif answer.startswith("B)"):
-
-                st.success(
-                    "Correct. Exploring the reason for missed doses is an important first step."
-                )
-
-                st.session_state.daily_answered = True
-
-            else:
+            except Exception as e:
 
                 st.error(
-                    "Not quite. Think about identifying the cause of non-adherence first."
+                    f"Could not grade answer: {e}"
                 )
 
-                st.session_state.daily_answered = True
+    if st.session_state.generic_feedback:
 
-    else:
+        st.divider()
+
+        st.subheader(
+            "🎓 AI feedback"
+        )
+
+        st.write(
+            st.session_state.generic_feedback
+        )
 
         if st.button(
-            "Claim +50 XP",
+            f"🏆 Complete mission (+{xp} XP)",
             type="primary"
         ):
 
             save_progress(
-                xp_add=50,
+                xp_add=xp,
                 mission_complete=True
             )
 
-            st.session_state.daily_answered = False
+            st.session_state.generic_mission = None
+            st.session_state.generic_feedback = None
 
             st.success(
-                "+50 XP added."
+                f"Mission completed. +{xp} XP"
             )
-
-            st.rerun()
 
 
 # ============================================================
@@ -3092,20 +2160,21 @@ def progress_page():
 
     profile = st.session_state.profile
 
-    xp = profile.get(
-        "xp",
-        0
+    xp = int(
+        profile.get("xp", 0)
     )
 
-    missions = profile.get(
-        "missions_completed",
-        0
+    missions = int(
+        profile.get(
+            "missions_completed",
+            0
+        )
     )
 
     level, title, next_xp = get_level_info(xp)
 
-    game_header(
-        "◈",
+    mission_header(
+        "📊",
         "My Progress",
         "Track your development across the PharmaQuest learning arena."
     )
@@ -3113,21 +2182,18 @@ def progress_page():
     c1, c2, c3 = st.columns(3)
 
     with c1:
-
         st.metric(
             "Current level",
             level
         )
 
     with c2:
-
         st.metric(
             "Total XP",
             xp
         )
 
     with c3:
-
         st.metric(
             "Missions completed",
             missions
@@ -3173,7 +2239,7 @@ def progress_page():
 
 
 # ============================================================
-# PROFILE PAGE
+# PROFILE
 # ============================================================
 
 def profile_page():
@@ -3185,15 +2251,14 @@ def profile_page():
         "Student"
     )
 
-    xp = profile.get(
-        "xp",
-        0
+    xp = int(
+        profile.get("xp", 0)
     )
 
     level, title, _ = get_level_info(xp)
 
-    game_header(
-        "♛",
+    mission_header(
+        "🏆",
         "My Profile",
         "Your personal PharmaQuest learning identity."
     )
@@ -3203,16 +2268,12 @@ def profile_page():
     )
 
     st.caption(
-        "PharmaQuest learner"
+        title
     )
 
     c1, c2 = st.columns(2)
 
     with c1:
-
-        st.write(
-            f"**Rank:** {title}"
-        )
 
         st.write(
             f"**Level:** {level}"
@@ -3222,12 +2283,12 @@ def profile_page():
             f"**XP:** {xp}"
         )
 
-    with c2:
-
         st.write(
             f"**Missions:** "
             f"{profile.get('missions_completed', 0)}"
         )
+
+    with c2:
 
         st.write(
             f"**Badges:** "
@@ -3296,16 +2357,40 @@ else:
 
     elif page == "Pharma Battle":
 
-        pharma_battle()
+        generic_ai_mission(
+            "⚔️",
+            "Pharma Battle",
+            "Challenge your pharmacology and therapeutics knowledge.",
+            100,
+            "competitive pharmacology battle"
+        )
 
     elif page == "Escape Room":
 
-        escape_room()
+        generic_ai_mission(
+            "🔐",
+            "Escape Room",
+            "Solve pharmacy clues and unlock the final stage.",
+            100,
+            "pharmacy clinical escape room"
+        )
 
     elif page == "Build the Patient":
 
-        build_patient()
+        generic_ai_mission(
+            "🧬",
+            "Build the Patient",
+            "Construct a patient profile and develop a safe treatment strategy.",
+            80,
+            "patient-building and treatment planning challenge"
+        )
 
     elif page == "Daily Challenge":
 
-        daily_challenge()
+        generic_ai_mission(
+            "🔥",
+            "Daily Challenge",
+            "Complete today's focused pharmacy challenge.",
+            50,
+            "short daily pharmacy challenge"
+        )
