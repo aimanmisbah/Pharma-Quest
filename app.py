@@ -19,7 +19,6 @@ st.set_page_config(
 # ============================================================
 
 def get_gemini_client():
-
     try:
         api_key = st.secrets.get("GEMINI_API_KEY")
 
@@ -805,10 +804,7 @@ with st.sidebar:
     st.html(
         """
         <div class="sidebar-brand">
-
-            <div class="sidebar-logo">
-                💊
-            </div>
+            <div class="sidebar-logo">💊</div>
 
             <div class="sidebar-title">
                 MISSION CONTROL
@@ -817,7 +813,6 @@ with st.sidebar:
             <div class="sidebar-subtitle">
                 PHARMACY TRAINING HUB
             </div>
-
         </div>
         """
     )
@@ -877,7 +872,6 @@ with st.sidebar:
                 background:#e2e8f0;
                 overflow:hidden;
             ">
-
                 <div style="
                     width:68%;
                     height:100%;
@@ -888,7 +882,6 @@ with st.sidebar:
                         #06b6d4
                     );
                 "></div>
-
             </div>
 
             <div style="
@@ -909,10 +902,6 @@ with st.sidebar:
 # ============================================================
 
 if page == "🏠 Home":
-
-    # --------------------------------------------------------
-    # COMMAND CENTER
-    # --------------------------------------------------------
 
     st.html(
         """
@@ -938,10 +927,7 @@ if page == "🏠 Home":
                 <div class="hero-status">
 
                     <div class="hero-status-card">
-
-                        <div class="hero-status-icon">
-                            🧪
-                        </div>
+                        <div class="hero-status-icon">🧪</div>
 
                         <div>
                             <div class="hero-status-label">
@@ -952,14 +938,10 @@ if page == "🏠 Home":
                                 Drug Explorer
                             </div>
                         </div>
-
                     </div>
 
                     <div class="hero-status-card">
-
-                        <div class="hero-status-icon">
-                            ⭐
-                        </div>
+                        <div class="hero-status-icon">⭐</div>
 
                         <div>
                             <div class="hero-status-label">
@@ -970,14 +952,10 @@ if page == "🏠 Home":
                                 1,250 XP
                             </div>
                         </div>
-
                     </div>
 
                     <div class="hero-status-card">
-
-                        <div class="hero-status-icon">
-                            🔥
-                        </div>
+                        <div class="hero-status-icon">🔥</div>
 
                         <div>
                             <div class="hero-status-label">
@@ -988,33 +966,24 @@ if page == "🏠 Home":
                                 7 Days
                             </div>
                         </div>
-
                     </div>
 
                 </div>
 
             </div>
 
-            <div class="floating-icon float-one">
-                💊
-            </div>
-
-            <div class="floating-icon float-two">
-                🧬
-            </div>
-
-            <div class="floating-icon float-three">
-                ⚕️
-            </div>
+            <div class="floating-icon float-one">💊</div>
+            <div class="floating-icon float-two">🧬</div>
+            <div class="floating-icon float-three">⚕️</div>
 
         </div>
         """
     )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # LEVEL
-    # --------------------------------------------------------
+    # ========================================================
 
     st.html(
         """
@@ -1063,9 +1032,9 @@ if page == "🏠 Home":
     )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # PROGRESS
-    # --------------------------------------------------------
+    # ========================================================
 
     st.html(
         """
@@ -1124,9 +1093,9 @@ if page == "🏠 Home":
             )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # MISSIONS
-    # --------------------------------------------------------
+    # ========================================================
 
     st.html(
         """
@@ -1142,63 +1111,54 @@ if page == "🏠 Home":
 
 
     missions = [
-
         (
             "🕵️",
             "Drug Detective",
             "Investigate clues and identify the mystery medicine.",
             "DEDUCTION"
         ),
-
         (
             "🩺",
             "Patient Case",
             "Think like a clinical pharmacist and solve the case.",
             "CLINICAL"
         ),
-
         (
             "🗣️",
             "AI Patient",
             "Practice counselling with realistic patient personalities.",
             "COUNSELLING"
         ),
-
         (
             "⚔️",
             "Pharma Battle",
             "Answer rapid-fire questions and test your knowledge.",
             "BATTLE"
         ),
-
         (
             "🔐",
             "Escape Room",
             "Solve the pharmacy mystery before time runs out.",
             "MYSTERY"
         ),
-
         (
             "🧬",
             "Build the Patient",
             "Explore how treatment decisions affect a fictional patient.",
             "SIMULATION"
         ),
-
         (
             "❓",
             "AI Quiz",
             "Create a personalized pharmacy quiz with AI.",
             "KNOWLEDGE"
         ),
-
         (
             "🔥",
             "Daily Challenge",
             "Complete today's challenge and earn bonus XP.",
             "DAILY"
         )
-
     ]
 
 
@@ -1631,4 +1591,3 @@ else:
     st.caption(
         "🚀 PharmaQuest is under active development."
     )
-```
