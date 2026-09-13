@@ -1,4 +1,4 @@
-
+```python
 import os
 import streamlit as st
 
@@ -16,897 +16,785 @@ st.set_page_config(
 
 
 # ============================================================
+# GEMINI CONNECTION
+# ============================================================
+
+def get_gemini_client():
+
+    try:
+        api_key = st.secrets.get("GEMINI_API_KEY")
+
+        if not api_key:
+            api_key = os.environ.get("GEMINI_API_KEY")
+
+        if not api_key:
+            return None
+
+        from google import genai
+
+        return genai.Client(api_key=api_key)
+
+    except Exception:
+        return None
+
+
+# ============================================================
 # CUSTOM DESIGN
 # ============================================================
 
-st.markdown("""
-<style>
+st.markdown(
+    """
+    <style>
+
+    /* ======================================================
+       GLOBAL
+       ====================================================== */
+
+    .stApp {
+        background:
+            radial-gradient(
+                circle at 5% 5%,
+                rgba(99,102,241,0.10),
+                transparent 25%
+            ),
+            radial-gradient(
+                circle at 95% 10%,
+                rgba(6,182,212,0.10),
+                transparent 25%
+            ),
+            linear-gradient(
+                135deg,
+                #f8fafc 0%,
+                #eef2ff 50%,
+                #f8fafc 100%
+            );
+    }
+
+    .block-container {
+        max-width: 1450px;
+        padding-top: 2rem;
+        padding-bottom: 4rem;
+    }
+
+    #MainMenu {
+        visibility: hidden;
+    }
+
+    footer {
+        visibility: hidden;
+    }
+
+
+    /* ======================================================
+       SIDEBAR
+       ====================================================== */
+
+    section[data-testid="stSidebar"] {
+        background:
+            linear-gradient(
+                180deg,
+                #ffffff 0%,
+                #f1f5ff 55%,
+                #eefcff 100%
+            );
+
+        border-right: 1px solid #e2e8f0;
+    }
+
+    .sidebar-brand {
+        padding: 15px 5px 22px 5px;
+    }
+
+    .sidebar-logo {
+        width: 64px;
+        height: 64px;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        border-radius: 21px;
+
+        background:
+            linear-gradient(
+                135deg,
+                #4f46e5,
+                #7c3aed,
+                #06b6d4
+            );
+
+        box-shadow:
+            0 15px 30px rgba(79,70,229,0.25);
+
+        font-size: 32px;
+        margin-bottom: 15px;
+    }
+
+    .sidebar-title {
+        color: #172554;
+        font-size: 20px;
+        font-weight: 950;
+        letter-spacing: -0.5px;
+    }
+
+    .sidebar-subtitle {
+        margin-top: 4px;
+        color: #94a3b8;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 1px;
+    }
 
-/* ==========================================================
-   GLOBAL
-   ========================================================== */
 
-.stApp {
+    /* ======================================================
+       COMMAND CENTER
+       ====================================================== */
 
-    background:
-        radial-gradient(
-            circle at 5% 5%,
-            rgba(99,102,241,0.10),
-            transparent 25%
-        ),
+    .command-center {
+        position: relative;
+        overflow: hidden;
 
-        radial-gradient(
-            circle at 95% 10%,
-            rgba(6,182,212,0.10),
-            transparent 25%
-        ),
+        min-height: 350px;
+        padding: 45px 52px;
 
-        linear-gradient(
-            135deg,
-            #f8fafc 0%,
-            #eef2ff 50%,
-            #f8fafc 100%
-        );
-}
+        border-radius: 34px;
 
+        background:
+            radial-gradient(
+                circle at 88% 18%,
+                rgba(34,211,238,0.25),
+                transparent 23%
+            ),
+            radial-gradient(
+                circle at 10% 95%,
+                rgba(168,85,247,0.28),
+                transparent 27%
+            ),
+            linear-gradient(
+                135deg,
+                #111827,
+                #312e81 55%,
+                #0e7490
+            );
 
-.block-container {
+        box-shadow:
+            0 30px 70px rgba(15,23,42,0.20),
+            inset 0 1px 1px rgba(255,255,255,0.18);
+    }
 
-    max-width: 1450px;
+    .command-center:before {
+        content: "";
 
-    padding-top: 2rem;
-    padding-bottom: 4rem;
-}
+        position: absolute;
 
+        width: 320px;
+        height: 320px;
 
-#MainMenu {
-    visibility: hidden;
-}
+        right: -130px;
+        top: -130px;
 
+        border-radius: 50%;
 
-footer {
-    visibility: hidden;
-}
+        border: 1px solid rgba(255,255,255,0.12);
+    }
 
+    .command-center:after {
+        content: "";
 
-/* ==========================================================
-   SIDEBAR
-   ========================================================== */
+        position: absolute;
 
-section[data-testid="stSidebar"] {
+        width: 180px;
+        height: 180px;
 
-    background:
-        linear-gradient(
-            180deg,
-            #ffffff 0%,
-            #f1f5ff 55%,
-            #eefcff 100%
-        );
+        right: 100px;
+        bottom: -120px;
 
-    border-right:
-        1px solid #e2e8f0;
-}
+        border-radius: 50%;
 
+        background: rgba(255,255,255,0.05);
+    }
 
-.sidebar-brand {
+    .command-content {
+        position: relative;
+        z-index: 5;
+        max-width: 800px;
+    }
 
-    padding:
-        15px 5px 22px 5px;
-}
+    .command-tag {
+        display: inline-block;
 
+        padding: 8px 15px;
 
-.sidebar-logo {
+        border-radius: 999px;
 
-    width: 64px;
-    height: 64px;
+        background: rgba(255,255,255,0.10);
 
-    display: flex;
+        border: 1px solid rgba(255,255,255,0.16);
 
-    align-items: center;
-    justify-content: center;
+        color: #a5f3fc;
 
-    border-radius: 21px;
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: 1.5px;
+    }
 
-    background:
-        linear-gradient(
-            135deg,
-            #4f46e5,
-            #7c3aed,
-            #06b6d4
-        );
+    .command-title {
+        margin-top: 20px;
 
-    box-shadow:
-        0 15px 30px
-        rgba(79,70,229,0.25);
+        color: white;
 
-    font-size: 32px;
+        font-size: 46px;
+        line-height: 1.08;
 
-    margin-bottom: 15px;
-}
+        font-weight: 950;
+        letter-spacing: -2px;
+    }
 
+    .command-title span {
+        display: block;
+        margin-top: 4px;
 
-.sidebar-title {
+        background:
+            linear-gradient(
+                90deg,
+                #67e8f9,
+                #a78bfa,
+                #f0abfc
+            );
 
-    color: #172554;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
 
-    font-size: 20px;
+    .command-text {
+        max-width: 690px;
 
-    font-weight: 950;
+        margin-top: 18px;
 
-    letter-spacing: -0.5px;
-}
+        color: #cbd5e1;
 
+        font-size: 15px;
+        line-height: 1.65;
+    }
 
-.sidebar-subtitle {
 
-    margin-top: 4px;
+    /* ======================================================
+       FLOATING ICONS
+       ====================================================== */
 
-    color: #94a3b8;
+    .floating-icon {
+        position: absolute;
+        z-index: 3;
 
-    font-size: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
 
-    font-weight: 800;
+        border-radius: 22px;
 
-    letter-spacing: 1px;
-}
+        background: rgba(255,255,255,0.10);
 
+        border: 1px solid rgba(255,255,255,0.18);
 
-/* ==========================================================
-   COMMAND CENTER
-   ========================================================== */
+        backdrop-filter: blur(12px);
 
-.command-center {
+        box-shadow:
+            0 20px 40px rgba(0,0,0,0.20);
+    }
 
-    position: relative;
+    .float-one {
+        width: 78px;
+        height: 78px;
 
-    overflow: hidden;
+        right: 100px;
+        top: 60px;
 
-    min-height: 350px;
+        font-size: 36px;
 
-    padding: 45px 52px;
+        transform: rotate(9deg);
+    }
 
-    border-radius: 34px;
+    .float-two {
+        width: 60px;
+        height: 60px;
 
-    background:
+        right: 220px;
+        top: 165px;
 
-        radial-gradient(
-            circle at 88% 18%,
-            rgba(34,211,238,0.25),
-            transparent 23%
-        ),
+        font-size: 27px;
 
-        radial-gradient(
-            circle at 10% 95%,
-            rgba(168,85,247,0.28),
-            transparent 27%
-        ),
+        transform: rotate(-8deg);
+    }
 
-        linear-gradient(
-            135deg,
-            #111827,
-            #312e81 55%,
-            #0e7490
-        );
+    .float-three {
+        width: 58px;
+        height: 58px;
 
-    box-shadow:
+        right: 55px;
+        bottom: 55px;
 
-        0 30px 70px
-        rgba(15,23,42,0.20),
+        font-size: 26px;
 
-        inset 0 1px 1px
-        rgba(255,255,255,0.18);
-}
+        transform: rotate(-12deg);
+    }
 
 
-.command-center:before {
+    /* ======================================================
+       HERO STATUS
+       ====================================================== */
 
-    content: "";
+    .hero-status {
+        position: relative;
+        z-index: 5;
 
-    position: absolute;
+        display: flex;
 
-    width: 320px;
-    height: 320px;
+        gap: 12px;
 
-    right: -130px;
-    top: -130px;
+        margin-top: 28px;
+    }
 
-    border-radius: 50%;
+    .hero-status-card {
+        display: flex;
 
-    border:
-        1px solid
-        rgba(255,255,255,0.12);
-}
+        align-items: center;
 
+        gap: 10px;
 
-.command-center:after {
+        padding: 11px 15px;
 
-    content: "";
+        border-radius: 16px;
 
-    position: absolute;
+        background: rgba(255,255,255,0.09);
 
-    width: 180px;
-    height: 180px;
+        border: 1px solid rgba(255,255,255,0.13);
+    }
 
-    right: 100px;
-    bottom: -120px;
+    .hero-status-icon {
+        font-size: 21px;
+    }
 
-    border-radius: 50%;
+    .hero-status-label {
+        color: #94a3b8;
 
-    background:
-        rgba(255,255,255,0.05);
-}
+        font-size: 8px;
 
+        font-weight: 900;
 
-.command-content {
+        letter-spacing: 1px;
+    }
 
-    position: relative;
+    .hero-status-value {
+        color: white;
 
-    z-index: 5;
+        font-size: 12px;
 
-    max-width: 800px;
-}
+        font-weight: 900;
+    }
 
 
-.command-tag {
+    /* ======================================================
+       LEVEL PANEL
+       ====================================================== */
 
-    display: inline-block;
+    .level-panel {
+        margin-top: 20px;
 
-    padding:
-        8px 15px;
+        padding: 22px 27px;
 
-    border-radius: 999px;
+        border-radius: 24px;
 
-    background:
-        rgba(255,255,255,0.10);
+        background: white;
 
-    border:
-        1px solid
-        rgba(255,255,255,0.16);
+        border: 1px solid #e2e8f0;
 
-    color: #a5f3fc;
+        box-shadow:
+            0 15px 35px rgba(15,23,42,0.07);
 
-    font-size: 10px;
+        display: flex;
 
-    font-weight: 900;
+        align-items: center;
 
-    letter-spacing: 1.5px;
-}
+        gap: 30px;
+    }
 
+    .level-badge {
+        min-width: 65px;
+        height: 65px;
 
-.command-title {
+        display: flex;
 
-    margin-top: 20px;
+        align-items: center;
+        justify-content: center;
 
-    color: white;
+        border-radius: 50%;
 
-    font-size: 46px;
+        background:
+            linear-gradient(
+                135deg,
+                #4f46e5,
+                #06b6d4
+            );
 
-    line-height: 1.08;
+        color: white;
 
-    font-weight: 950;
+        font-size: 19px;
 
-    letter-spacing: -2px;
-}
+        font-weight: 950;
 
+        box-shadow:
+            0 10px 25px rgba(79,70,229,0.25);
+    }
 
-.command-title span {
+    .level-info {
+        min-width: 220px;
+    }
 
-    display: block;
+    .level-caption {
+        color: #94a3b8;
 
-    margin-top: 4px;
+        font-size: 9px;
 
-    background:
+        font-weight: 900;
 
-        linear-gradient(
-            90deg,
-            #67e8f9,
-            #a78bfa,
-            #f0abfc
-        );
+        letter-spacing: 1.3px;
+    }
 
-    -webkit-background-clip: text;
+    .level-name {
+        color: #172554;
 
-    -webkit-text-fill-color: transparent;
-}
+        font-size: 19px;
 
+        font-weight: 950;
+    }
 
-.command-text {
+    .level-description {
+        color: #64748b;
 
-    max-width: 690px;
+        font-size: 11px;
+    }
 
-    margin-top: 18px;
+    .level-progress {
+        flex: 1;
+    }
 
-    color: #cbd5e1;
+    .level-progress-top {
+        display: flex;
 
-    font-size: 15px;
+        justify-content: space-between;
 
-    line-height: 1.65;
-}
+        color: #475569;
 
+        font-size: 10px;
 
-/* ==========================================================
-   FLOATING PHARMACY ICONS
-   ========================================================== */
+        font-weight: 900;
 
-.floating-icon {
+        margin-bottom: 8px;
+    }
 
-    position: absolute;
+    .progress-track {
+        width: 100%;
 
-    z-index: 3;
+        height: 10px;
 
-    display: flex;
+        border-radius: 999px;
 
-    align-items: center;
-    justify-content: center;
+        background: #e2e8f0;
 
-    border-radius: 22px;
+        overflow: hidden;
+    }
 
-    background:
-        rgba(255,255,255,0.10);
+    .progress-fill {
+        width: 68%;
 
-    border:
-        1px solid
-        rgba(255,255,255,0.18);
+        height: 100%;
 
-    backdrop-filter: blur(12px);
+        border-radius: 999px;
 
-    box-shadow:
-        0 20px 40px
-        rgba(0,0,0,0.20);
-}
+        background:
+            linear-gradient(
+                90deg,
+                #4f46e5,
+                #06b6d4
+            );
+    }
 
+    .level-bottom {
+        display: flex;
 
-.float-one {
+        justify-content: space-between;
 
-    width: 78px;
-    height: 78px;
+        color: #94a3b8;
 
-    right: 100px;
-    top: 60px;
+        font-size: 9px;
 
-    font-size: 36px;
+        margin-top: 6px;
+    }
 
-    transform: rotate(9deg);
-}
 
+    /* ======================================================
+       SECTION HEADINGS
+       ====================================================== */
 
-.float-two {
+    .section-title {
+        margin-top: 32px;
+        margin-bottom: 15px;
 
-    width: 60px;
-    height: 60px;
+        color: #172554;
 
-    right: 220px;
-    top: 165px;
+        font-size: 25px;
 
-    font-size: 27px;
+        font-weight: 950;
+    }
 
-    transform: rotate(-8deg);
-}
+    .section-subtitle {
+        margin-top: -10px;
 
+        margin-bottom: 17px;
 
-.float-three {
+        color: #94a3b8;
 
-    width: 58px;
-    height: 58px;
+        font-size: 12px;
 
-    right: 55px;
-    bottom: 55px;
+        font-weight: 600;
+    }
 
-    font-size: 26px;
 
-    transform: rotate(-12deg);
-}
+    /* ======================================================
+       STAT CARDS
+       ====================================================== */
 
+    .stat-card {
+        min-height: 150px;
 
-/* ==========================================================
-   HERO MINI STATUS
-   ========================================================== */
+        padding: 22px;
 
-.hero-status {
+        border-radius: 23px;
 
-    position: relative;
+        background: white;
 
-    z-index: 5;
+        border:
+            1px solid rgba(148,163,184,0.15);
 
-    display: flex;
+        box-shadow:
+            0 12px 30px rgba(15,23,42,0.07);
 
-    gap: 12px;
+        transition:
+            transform 0.25s ease,
+            box-shadow 0.25s ease;
+    }
 
-    margin-top: 28px;
-}
+    .stat-card:hover {
+        transform: translateY(-5px);
 
+        box-shadow:
+            0 20px 40px rgba(79,70,229,0.12);
+    }
 
-.hero-status-card {
+    .stat-icon {
+        font-size: 27px;
+    }
 
-    display: flex;
+    .stat-number {
+        margin-top: 6px;
 
-    align-items: center;
+        color: #172554;
 
-    gap: 10px;
+        font-size: 28px;
 
-    padding:
-        11px 15px;
+        font-weight: 950;
+    }
 
-    border-radius: 16px;
+    .stat-name {
+        color: #475569;
 
-    background:
-        rgba(255,255,255,0.09);
+        font-size: 9px;
 
-    border:
-        1px solid
-        rgba(255,255,255,0.13);
-}
+        font-weight: 900;
 
+        letter-spacing: 1px;
+    }
 
-.hero-status-icon {
+    .stat-description {
+        margin-top: 5px;
 
-    font-size: 21px;
-}
+        color: #94a3b8;
 
+        font-size: 10px;
+    }
 
-.hero-status-label {
 
-    color: #94a3b8;
+    /* ======================================================
+       MISSION CARDS
+       ====================================================== */
 
-    font-size: 8px;
+    .mission-card {
+        min-height: 250px;
 
-    font-weight: 900;
+        margin-bottom: 20px;
 
-    letter-spacing: 1px;
-}
+        padding: 22px;
 
+        border-radius: 25px;
 
-.hero-status-value {
+        background: white;
 
-    color: white;
+        border:
+            1px solid rgba(148,163,184,0.14);
 
-    font-size: 12px;
+        box-shadow:
+            0 12px 30px rgba(15,23,42,0.07);
 
-    font-weight: 900;
-}
+        transition:
+            transform 0.25s ease,
+            box-shadow 0.25s ease;
+    }
 
+    .mission-card:hover {
+        transform: translateY(-7px);
 
-/* ==========================================================
-   LEVEL PANEL
-   ========================================================== */
+        box-shadow:
+            0 25px 50px rgba(79,70,229,0.14);
+    }
 
-.level-panel {
+    .mission-header {
+        display: flex;
 
-    margin-top: 20px;
+        justify-content: space-between;
 
-    padding:
-        22px 27px;
+        align-items: flex-start;
+    }
 
-    border-radius: 24px;
+    .mission-icon {
+        width: 58px;
+        height: 58px;
 
-    background: white;
+        display: flex;
 
-    border:
-        1px solid #e2e8f0;
+        align-items: center;
+        justify-content: center;
 
-    box-shadow:
-        0 15px 35px
-        rgba(15,23,42,0.07);
+        border-radius: 18px;
 
-    display: flex;
+        background:
+            linear-gradient(
+                135deg,
+                #eef2ff,
+                #ecfeff
+            );
 
-    align-items: center;
+        font-size: 30px;
+    }
 
-    gap: 30px;
-}
+    .mission-type {
+        padding: 6px 9px;
 
+        border-radius: 999px;
 
-.level-badge {
+        background: #f1f5f9;
 
-    min-width: 65px;
-    height: 65px;
+        color: #64748b;
 
-    display: flex;
+        font-size: 7px;
 
-    align-items: center;
-    justify-content: center;
+        font-weight: 950;
 
-    border-radius: 50%;
+        letter-spacing: 1px;
+    }
 
-    background:
-        linear-gradient(
-            135deg,
-            #4f46e5,
-            #06b6d4
-        );
+    .mission-name {
+        margin-top: 17px;
 
-    color: white;
+        color: #172554;
 
-    font-size: 19px;
+        font-size: 18px;
 
-    font-weight: 950;
+        font-weight: 950;
+    }
 
-    box-shadow:
-        0 10px 25px
-        rgba(79,70,229,0.25);
-}
+    .mission-description {
+        min-height: 58px;
 
+        margin-top: 8px;
 
-.level-info {
+        color: #64748b;
 
-    min-width: 220px;
-}
+        font-size: 11px;
 
+        line-height: 1.55;
+    }
 
-.level-caption {
+    .mission-action {
+        margin-top: 15px;
 
-    color: #94a3b8;
+        color: #4f46e5;
 
-    font-size: 9px;
+        font-size: 9px;
 
-    font-weight: 900;
+        font-weight: 950;
 
-    letter-spacing: 1.3px;
-}
+        letter-spacing: 1px;
+    }
 
 
-.level-name {
+    /* ======================================================
+       BUTTONS
+       ====================================================== */
 
-    color: #172554;
+    .stButton > button {
+        min-height: 45px;
 
-    font-size: 19px;
+        border-radius: 14px;
 
-    font-weight: 950;
-}
+        border: none;
 
+        font-weight: 850;
 
-.level-description {
+        transition:
+            transform 0.2s ease,
+            box-shadow 0.2s ease;
+    }
 
-    color: #64748b;
+    .stButton > button:hover {
+        transform: translateY(-2px);
 
-    font-size: 11px;
-}
+        box-shadow:
+            0 8px 20px rgba(79,70,229,0.15);
+    }
 
 
-.level-progress {
+    /* ======================================================
+       MOBILE
+       ====================================================== */
 
-    flex: 1;
-}
+    @media (max-width: 900px) {
 
+        .command-title {
+            font-size: 34px;
+        }
 
-.level-progress-top {
+        .command-center {
+            padding: 32px 28px;
+        }
 
-    display: flex;
+        .floating-icon {
+            display: none;
+        }
 
-    justify-content: space-between;
+        .hero-status {
+            flex-wrap: wrap;
+        }
 
-    color: #475569;
+        .level-panel {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+    }
 
-    font-size: 10px;
-
-    font-weight: 900;
-
-    margin-bottom: 8px;
-}
-
-
-.progress-track {
-
-    width: 100%;
-
-    height: 10px;
-
-    border-radius: 999px;
-
-    background: #e2e8f0;
-
-    overflow: hidden;
-}
-
-
-.progress-fill {
-
-    width: 68%;
-
-    height: 100%;
-
-    border-radius: 999px;
-
-    background:
-        linear-gradient(
-            90deg,
-            #4f46e5,
-            #06b6d4
-        );
-}
-
-
-.level-bottom {
-
-    display: flex;
-
-    justify-content: space-between;
-
-    color: #94a3b8;
-
-    font-size: 9px;
-
-    margin-top: 6px;
-}
-
-
-/* ==========================================================
-   SECTION HEADINGS
-   ========================================================== */
-
-.section-title {
-
-    margin-top: 32px;
-
-    margin-bottom: 15px;
-
-    color: #172554;
-
-    font-size: 25px;
-
-    font-weight: 950;
-}
-
-
-.section-subtitle {
-
-    margin-top: -10px;
-
-    margin-bottom: 17px;
-
-    color: #94a3b8;
-
-    font-size: 12px;
-
-    font-weight: 600;
-}
-
-
-/* ==========================================================
-   STAT CARDS
-   ========================================================== */
-
-.stat-card {
-
-    min-height: 150px;
-
-    padding: 22px;
-
-    border-radius: 23px;
-
-    background: white;
-
-    border:
-        1px solid
-        rgba(148,163,184,0.15);
-
-    box-shadow:
-        0 12px 30px
-        rgba(15,23,42,0.07);
-
-    transition:
-        transform 0.25s ease,
-        box-shadow 0.25s ease;
-}
-
-
-.stat-card:hover {
-
-    transform:
-        translateY(-5px);
-
-    box-shadow:
-        0 20px 40px
-        rgba(79,70,229,0.12);
-}
-
-
-.stat-icon {
-
-    font-size: 27px;
-}
-
-
-.stat-number {
-
-    margin-top: 6px;
-
-    color: #172554;
-
-    font-size: 28px;
-
-    font-weight: 950;
-}
-
-
-.stat-name {
-
-    color: #475569;
-
-    font-size: 9px;
-
-    font-weight: 900;
-
-    letter-spacing: 1px;
-}
-
-
-.stat-description {
-
-    margin-top: 5px;
-
-    color: #94a3b8;
-
-    font-size: 10px;
-}
-
-
-/* ==========================================================
-   MISSION CARDS
-   ========================================================== */
-
-.mission-card {
-
-    min-height: 250px;
-
-    margin-bottom: 20px;
-
-    padding: 22px;
-
-    border-radius: 25px;
-
-    background: white;
-
-    border:
-        1px solid
-        rgba(148,163,184,0.14);
-
-    box-shadow:
-        0 12px 30px
-        rgba(15,23,42,0.07);
-
-    transition:
-        transform 0.25s ease,
-        box-shadow 0.25s ease;
-}
-
-
-.mission-card:hover {
-
-    transform:
-        translateY(-7px);
-
-    box-shadow:
-        0 25px 50px
-        rgba(79,70,229,0.14);
-}
-
-
-.mission-header {
-
-    display: flex;
-
-    justify-content: space-between;
-
-    align-items: flex-start;
-}
-
-
-.mission-icon {
-
-    width: 58px;
-    height: 58px;
-
-    display: flex;
-
-    align-items: center;
-    justify-content: center;
-
-    border-radius: 18px;
-
-    background:
-        linear-gradient(
-            135deg,
-            #eef2ff,
-            #ecfeff
-        );
-
-    font-size: 30px;
-}
-
-
-.mission-type {
-
-    padding:
-        6px 9px;
-
-    border-radius: 999px;
-
-    background: #f1f5f9;
-
-    color: #64748b;
-
-    font-size: 7px;
-
-    font-weight: 950;
-
-    letter-spacing: 1px;
-}
-
-
-.mission-name {
-
-    margin-top: 17px;
-
-    color: #172554;
-
-    font-size: 18px;
-
-    font-weight: 950;
-}
-
-
-.mission-description {
-
-    min-height: 58px;
-
-    margin-top: 8px;
-
-    color: #64748b;
-
-    font-size: 11px;
-
-    line-height: 1.55;
-}
-
-
-.mission-action {
-
-    margin-top: 15px;
-
-    color: #4f46e5;
-
-    font-size: 9px;
-
-    font-weight: 950;
-
-    letter-spacing: 1px;
-}
-
-
-/* ==========================================================
-   BUTTONS
-   ========================================================== */
-
-.stButton > button {
-
-    min-height: 45px;
-
-    border-radius: 14px;
-
-    border: none;
-
-    font-weight: 850;
-
-    transition:
-        transform 0.2s ease,
-        box-shadow 0.2s ease;
-}
-
-
-.stButton > button:hover {
-
-    transform:
-        translateY(-2px);
-
-    box-shadow:
-        0 8px 20px
-        rgba(79,70,229,0.15);
-}
-
-
-</style>
-""", unsafe_allow_html=True)
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 
 # ============================================================
@@ -915,23 +803,25 @@ section[data-testid="stSidebar"] {
 
 with st.sidebar:
 
-    st.markdown("""
-    <div class="sidebar-brand">
+    st.html(
+        """
+        <div class="sidebar-brand">
 
-        <div class="sidebar-logo">
-            💊
+            <div class="sidebar-logo">
+                💊
+            </div>
+
+            <div class="sidebar-title">
+                MISSION CONTROL
+            </div>
+
+            <div class="sidebar-subtitle">
+                PHARMACY TRAINING HUB
+            </div>
+
         </div>
-
-        <div class="sidebar-title">
-            MISSION CONTROL
-        </div>
-
-        <div class="sidebar-subtitle">
-            PHARMACY TRAINING HUB
-        </div>
-
-    </div>
-    """, unsafe_allow_html=True)
+        """
+    )
 
     st.markdown("---")
 
@@ -953,64 +843,66 @@ with st.sidebar:
 
     st.markdown("---")
 
-    st.markdown("""
-    <div style="
-        padding:16px;
-        border-radius:18px;
-        background:white;
-        border:1px solid #e2e8f0;
-        box-shadow:0 8px 20px rgba(15,23,42,0.05);
-    ">
-
+    st.html(
+        """
         <div style="
-            font-size:9px;
-            color:#94a3b8;
-            font-weight:900;
-            letter-spacing:1px;
-        ">
-            CURRENT RANK
-        </div>
-
-        <div style="
-            margin-top:5px;
-            font-size:17px;
-            font-weight:900;
-            color:#312e81;
-        ">
-            🌱 Drug Explorer
-        </div>
-
-        <div style="
-            margin-top:10px;
-            height:6px;
-            border-radius:10px;
-            background:#e2e8f0;
-            overflow:hidden;
+            padding:16px;
+            border-radius:18px;
+            background:white;
+            border:1px solid #e2e8f0;
+            box-shadow:0 8px 20px rgba(15,23,42,0.05);
         ">
 
             <div style="
-                width:68%;
-                height:100%;
+                font-size:9px;
+                color:#94a3b8;
+                font-weight:900;
+                letter-spacing:1px;
+            ">
+                CURRENT RANK
+            </div>
+
+            <div style="
+                margin-top:5px;
+                font-size:17px;
+                font-weight:900;
+                color:#312e81;
+            ">
+                🌱 Drug Explorer
+            </div>
+
+            <div style="
+                margin-top:10px;
+                height:6px;
                 border-radius:10px;
-                background:linear-gradient(
-                    90deg,
-                    #4f46e5,
-                    #06b6d4
-                );
-            "></div>
+                background:#e2e8f0;
+                overflow:hidden;
+            ">
+
+                <div style="
+                    width:68%;
+                    height:100%;
+                    border-radius:10px;
+                    background:linear-gradient(
+                        90deg,
+                        #4f46e5,
+                        #06b6d4
+                    );
+                "></div>
+
+            </div>
+
+            <div style="
+                margin-top:7px;
+                font-size:10px;
+                color:#64748b;
+            ">
+                ⭐ 1,250 / 1,800 XP
+            </div>
 
         </div>
-
-        <div style="
-            margin-top:7px;
-            font-size:10px;
-            color:#64748b;
-        ">
-            ⭐ 1,250 / 1,800 XP
-        </div>
-
-    </div>
-    """, unsafe_allow_html=True)
+        """
+    )
 
 
 # ============================================================
@@ -1020,185 +912,182 @@ with st.sidebar:
 if page == "🏠 Home":
 
     # --------------------------------------------------------
-    # MAIN COMMAND CENTER
+    # COMMAND CENTER
     # --------------------------------------------------------
 
-    st.markdown("""
-    <div class="command-center">
+    st.html(
+        """
+        <div class="command-center">
 
-        <div class="command-content">
+            <div class="command-content">
 
-            <div class="command-tag">
-                ⚡ PHARMACY COMMAND CENTER
-            </div>
+                <div class="command-tag">
+                    ⚡ PHARMACY COMMAND CENTER
+                </div>
 
-            <div class="command-title">
-                Ready for your next
-                <span>pharmacy mission?</span>
-            </div>
+                <div class="command-title">
+                    Ready for your next
+                    <span>pharmacy mission?</span>
+                </div>
 
-            <div class="command-text">
-                Train your pharmacy knowledge through challenges,
-                clinical cases, patient conversations and AI-powered
-                missions designed to make learning more active.
-            </div>
+                <div class="command-text">
+                    Train your pharmacy knowledge through challenges,
+                    clinical cases, patient conversations and AI-powered
+                    missions designed to make learning more active.
+                </div>
 
-            <div class="hero-status">
+                <div class="hero-status">
 
-                <div class="hero-status-card">
+                    <div class="hero-status-card">
 
-                    <div class="hero-status-icon">
-                        🧪
+                        <div class="hero-status-icon">
+                            🧪
+                        </div>
+
+                        <div>
+                            <div class="hero-status-label">
+                                CURRENT RANK
+                            </div>
+
+                            <div class="hero-status-value">
+                                Drug Explorer
+                            </div>
+                        </div>
+
                     </div>
 
-                    <div>
-                        <div class="hero-status-label">
-                            CURRENT RANK
+                    <div class="hero-status-card">
+
+                        <div class="hero-status-icon">
+                            ⭐
                         </div>
 
-                        <div class="hero-status-value">
-                            Drug Explorer
+                        <div>
+                            <div class="hero-status-label">
+                                EXPERIENCE
+                            </div>
+
+                            <div class="hero-status-value">
+                                1,250 XP
+                            </div>
                         </div>
+
+                    </div>
+
+                    <div class="hero-status-card">
+
+                        <div class="hero-status-icon">
+                            🔥
+                        </div>
+
+                        <div>
+                            <div class="hero-status-label">
+                                STREAK
+                            </div>
+
+                            <div class="hero-status-value">
+                                7 Days
+                            </div>
+                        </div>
+
                     </div>
 
                 </div>
 
+            </div>
 
-                <div class="hero-status-card">
+            <div class="floating-icon float-one">
+                💊
+            </div>
 
-                    <div class="hero-status-icon">
-                        ⭐
-                    </div>
+            <div class="floating-icon float-two">
+                🧬
+            </div>
 
-                    <div>
-                        <div class="hero-status-label">
-                            EXPERIENCE
-                        </div>
-
-                        <div class="hero-status-value">
-                            1,250 XP
-                        </div>
-                    </div>
-
-                </div>
-
-
-                <div class="hero-status-card">
-
-                    <div class="hero-status-icon">
-                        🔥
-                    </div>
-
-                    <div>
-                        <div class="hero-status-label">
-                            STREAK
-                        </div>
-
-                        <div class="hero-status-value">
-                            7 Days
-                        </div>
-                    </div>
-
-                </div>
-
+            <div class="floating-icon float-three">
+                ⚕️
             </div>
 
         </div>
-
-
-        <div class="floating-icon float-one">
-            💊
-        </div>
-
-        <div class="floating-icon float-two">
-            🧬
-        </div>
-
-        <div class="floating-icon float-three">
-            ⚕️
-        </div>
-
-    </div>
-    """, unsafe_allow_html=True)
+        """
+    )
 
 
     # --------------------------------------------------------
     # LEVEL
     # --------------------------------------------------------
 
-    st.markdown("""
-    <div class="level-panel">
+    st.html(
+        """
+        <div class="level-panel">
 
-        <div class="level-badge">
-            05
+            <div class="level-badge">
+                05
+            </div>
+
+            <div class="level-info">
+
+                <div class="level-caption">
+                    CURRENT LEVEL
+                </div>
+
+                <div class="level-name">
+                    Drug Explorer
+                </div>
+
+                <div class="level-description">
+                    550 XP until Clinical Challenger
+                </div>
+
+            </div>
+
+            <div class="level-progress">
+
+                <div class="level-progress-top">
+                    <span>LEVEL PROGRESS</span>
+                    <span>1,250 / 1,800 XP</span>
+                </div>
+
+                <div class="progress-track">
+                    <div class="progress-fill"></div>
+                </div>
+
+                <div class="level-bottom">
+                    <span>⭐ Keep going!</span>
+                    <span>68%</span>
+                </div>
+
+            </div>
+
         </div>
-
-        <div class="level-info">
-
-            <div class="level-caption">
-                CURRENT LEVEL
-            </div>
-
-            <div class="level-name">
-                Drug Explorer
-            </div>
-
-            <div class="level-description">
-                550 XP until Clinical Challenger
-            </div>
-
-        </div>
-
-        <div class="level-progress">
-
-            <div class="level-progress-top">
-                <span>LEVEL PROGRESS</span>
-                <span>1,250 / 1,800 XP</span>
-            </div>
-
-            <div class="progress-track">
-                <div class="progress-fill"></div>
-            </div>
-
-            <div class="level-bottom">
-                <span>⭐ Keep going!</span>
-                <span>68%</span>
-            </div>
-
-        </div>
-
-    </div>
-    """, unsafe_allow_html=True)
+        """
+    )
 
 
     # --------------------------------------------------------
     # PROGRESS
     # --------------------------------------------------------
 
-    st.markdown(
-        '<div class="section-title">Your Progress</div>',
-        unsafe_allow_html=True
-    )
+    st.html(
+        """
+        <div class="section-title">
+            Your Progress
+        </div>
 
-    st.markdown(
-        '<div class="section-subtitle">Build your pharmacy skills one mission at a time.</div>',
-        unsafe_allow_html=True
+        <div class="section-subtitle">
+            Build your pharmacy skills one mission at a time.
+        </div>
+        """
     )
 
 
     c1, c2, c3, c4 = st.columns(4)
 
-
     stats = [
-
         ("🔥", "7", "DAY STREAK", "You're on fire!"),
-
         ("🏆", "4", "BADGES", "Keep collecting"),
-
         ("🧠", "23", "MISSIONS", "Completed"),
-
         ("⚡", "1,250", "TOTAL XP", "Experience earned")
-
     ]
 
 
@@ -1211,7 +1100,7 @@ if page == "🏠 Home":
 
         with col:
 
-            st.markdown(
+            st.html(
                 f"""
                 <div class="stat-card">
 
@@ -1232,8 +1121,7 @@ if page == "🏠 Home":
                     </div>
 
                 </div>
-                """,
-                unsafe_allow_html=True
+                """
             )
 
 
@@ -1241,14 +1129,16 @@ if page == "🏠 Home":
     # MISSIONS
     # --------------------------------------------------------
 
-    st.markdown(
-        '<div class="section-title">Choose Your Mission</div>',
-        unsafe_allow_html=True
-    )
+    st.html(
+        """
+        <div class="section-title">
+            Choose Your Mission
+        </div>
 
-    st.markdown(
-        '<div class="section-subtitle">How will you train today?</div>',
-        unsafe_allow_html=True
+        <div class="section-subtitle">
+            How will you train today?
+        </div>
+        """
     )
 
 
@@ -1322,7 +1212,7 @@ if page == "🏠 Home":
 
         with columns[i % 4]:
 
-            st.markdown(
+            st.html(
                 f"""
                 <div class="mission-card">
 
@@ -1351,8 +1241,7 @@ if page == "🏠 Home":
                     </div>
 
                 </div>
-                """,
-                unsafe_allow_html=True
+                """
             )
 
 
@@ -1376,27 +1265,18 @@ elif page == "🕵️ Drug Detective":
 
     if st.button("🔎 START INVESTIGATION"):
 
-        api_key = os.environ.get("GEMINI_API_KEY")
+        client = get_gemini_client()
 
-
-        if not api_key:
+        if client is None:
 
             st.error(
-                "Gemini API key is not connected."
+                "Gemini API key is not connected. "
+                "Add GEMINI_API_KEY to Streamlit Secrets."
             )
 
         else:
 
-            try:
-
-                from google import genai
-
-                client = genai.Client(
-                    api_key=api_key
-                )
-
-
-                prompt = f"""
+            prompt = f"""
 You are an educational pharmacy game master.
 
 Create a Drug Detective mystery for a Pharm-D student.
@@ -1418,6 +1298,7 @@ This is an educational simulation only.
 Do not provide personalized medical advice.
 """
 
+            try:
 
                 with st.spinner(
                     "🧠 Creating your mystery..."
@@ -1428,15 +1309,9 @@ Do not provide personalized medical advice.
                         contents=prompt
                     )
 
+                st.markdown("### 🔍 CASE FILE")
 
-                st.markdown(
-                    "### 🔍 CASE FILE"
-                )
-
-                st.write(
-                    response.text
-                )
-
+                st.write(response.text)
 
             except Exception as e:
 
@@ -1444,9 +1319,7 @@ Do not provide personalized medical advice.
                     "Gemini could not generate the case."
                 )
 
-                st.code(
-                    str(e)
-                )
+                st.code(str(e))
 
 
 # ============================================================
@@ -1461,7 +1334,6 @@ elif page == "🩺 Patient Case":
         "This is a fictional educational clinical pharmacy simulation."
     )
 
-
     condition = st.text_input(
         "Choose a condition",
         placeholder="Example: hypertension, asthma, diabetes"
@@ -1470,29 +1342,18 @@ elif page == "🩺 Patient Case":
 
     if st.button("🩺 GENERATE CASE"):
 
-        api_key = os.environ.get(
-            "GEMINI_API_KEY"
-        )
+        client = get_gemini_client()
 
-
-        if not api_key:
+        if client is None:
 
             st.error(
-                "Gemini API key is not connected."
+                "Gemini API key is not connected. "
+                "Add GEMINI_API_KEY to Streamlit Secrets."
             )
 
         else:
 
-            try:
-
-                from google import genai
-
-                client = genai.Client(
-                    api_key=api_key
-                )
-
-
-                prompt = f"""
+            prompt = f"""
 Create a fictional educational clinical pharmacy case.
 
 Condition:
@@ -1511,6 +1372,7 @@ This is an educational simulation only.
 Do not provide personalized medical advice.
 """
 
+            try:
 
                 with st.spinner(
                     "🩺 Preparing the patient..."
@@ -1521,25 +1383,15 @@ Do not provide personalized medical advice.
                         contents=prompt
                     )
 
+                st.markdown("### 🧑‍⚕️ PATIENT FILE")
 
-                st.markdown(
-                    "### 🧑‍⚕️ PATIENT FILE"
-                )
-
-                st.write(
-                    response.text
-                )
-
+                st.write(response.text)
 
             except Exception as e:
 
-                st.error(
-                    "Gemini error"
-                )
+                st.error("Gemini error")
 
-                st.code(
-                    str(e)
-                )
+                st.code(str(e))
 
 
 # ============================================================
@@ -1574,17 +1426,14 @@ elif page == "🗣️ AI Patient":
 
     if st.button("💬 TALK TO PATIENT"):
 
-        api_key = os.environ.get(
-            "GEMINI_API_KEY"
-        )
+        client = get_gemini_client()
 
-
-        if not api_key:
+        if client is None:
 
             st.error(
-                "Gemini API key is not connected."
+                "Gemini API key is not connected. "
+                "Add GEMINI_API_KEY to Streamlit Secrets."
             )
-
 
         elif not message:
 
@@ -1592,19 +1441,9 @@ elif page == "🗣️ AI Patient":
                 "Enter something to say to the patient."
             )
 
-
         else:
 
-            try:
-
-                from google import genai
-
-                client = genai.Client(
-                    api_key=api_key
-                )
-
-
-                prompt = f"""
+            prompt = f"""
 You are a fictional patient in a pharmacy counselling simulation.
 
 Patient personality:
@@ -1621,6 +1460,7 @@ This is communication practice only.
 Do not provide medical advice.
 """
 
+            try:
 
                 with st.spinner(
                     "🗣️ Patient is responding..."
@@ -1631,25 +1471,15 @@ Do not provide medical advice.
                         contents=prompt
                     )
 
+                st.markdown("### 🧑 PATIENT")
 
-                st.markdown(
-                    "### 🧑 PATIENT"
-                )
-
-                st.write(
-                    response.text
-                )
-
+                st.write(response.text)
 
             except Exception as e:
 
-                st.error(
-                    "Gemini error"
-                )
+                st.error("Gemini error")
 
-                st.code(
-                    str(e)
-                )
+                st.code(str(e))
 
 
 # ============================================================
@@ -1691,30 +1521,18 @@ elif page == "❓ AI Quiz":
 
     if st.button("🧠 CREATE QUIZ"):
 
-        api_key = os.environ.get(
-            "GEMINI_API_KEY"
-        )
+        client = get_gemini_client()
 
-
-        if not api_key:
+        if client is None:
 
             st.error(
-                "Gemini API key is not connected."
+                "Gemini API key is not connected. "
+                "Add GEMINI_API_KEY to Streamlit Secrets."
             )
-
 
         else:
 
-            try:
-
-                from google import genai
-
-                client = genai.Client(
-                    api_key=api_key
-                )
-
-
-                prompt = f"""
+            prompt = f"""
 You are a pharmacy education game master.
 
 Create {number} MCQs for a Pharm-D student.
@@ -1737,6 +1555,7 @@ At the end give an ANSWER KEY.
 Do not give explanations unless requested.
 """
 
+            try:
 
                 with st.spinner(
                     "🧠 Building your quiz..."
@@ -1747,25 +1566,15 @@ Do not give explanations unless requested.
                         contents=prompt
                     )
 
+                st.markdown("### 📚 YOUR CHALLENGE")
 
-                st.markdown(
-                    "### 📚 YOUR CHALLENGE"
-                )
-
-                st.write(
-                    response.text
-                )
-
+                st.write(response.text)
 
             except Exception as e:
 
-                st.error(
-                    "Gemini error"
-                )
+                st.error("Gemini error")
 
-                st.code(
-                    str(e)
-                )
+                st.code(str(e))
 
 
 # ============================================================
@@ -1776,43 +1585,45 @@ else:
 
     st.title(page)
 
-    st.markdown("""
-    <div style="
-        padding:35px;
-        margin-top:20px;
-        border-radius:25px;
-        background:white;
-        border:1px solid #e2e8f0;
-        box-shadow:0 15px 35px rgba(15,23,42,0.07);
-        text-align:center;
-    ">
-
+    st.html(
+        """
         <div style="
-            font-size:55px;
+            padding:35px;
+            margin-top:20px;
+            border-radius:25px;
+            background:white;
+            border:1px solid #e2e8f0;
+            box-shadow:0 15px 35px rgba(15,23,42,0.07);
+            text-align:center;
         ">
-            🚀
-        </div>
 
-        <div style="
-            margin-top:12px;
-            font-size:26px;
-            font-weight:950;
-            color:#172554;
-        ">
-            Mission Loading
-        </div>
+            <div style="
+                font-size:55px;
+            ">
+                🚀
+            </div>
 
-        <div style="
-            margin-top:8px;
-            color:#64748b;
-            font-size:14px;
-        ">
-            This mission is part of the PharmaQuest roadmap.
-            More game mechanics are coming soon.
-        </div>
+            <div style="
+                margin-top:12px;
+                font-size:26px;
+                font-weight:950;
+                color:#172554;
+            ">
+                Mission Loading
+            </div>
 
-    </div>
-    """, unsafe_allow_html=True)
+            <div style="
+                margin-top:8px;
+                color:#64748b;
+                font-size:14px;
+            ">
+                This mission is part of the PharmaQuest roadmap.
+                More game mechanics are coming soon.
+            </div>
+
+        </div>
+        """
+    )
 
     st.write("")
 
@@ -1821,3 +1632,4 @@ else:
     st.caption(
         "🚀 PharmaQuest is under active development."
     )
+```
