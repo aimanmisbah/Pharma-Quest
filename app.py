@@ -18,28 +18,23 @@ st.set_page_config(
 # INITIAL STUDENT STATE
 # ============================================================
 
-INITIAL_XP = 0
-INITIAL_LEVEL = 1
-INITIAL_STREAK = 0
-INITIAL_BADGES = 0
-INITIAL_MISSIONS = 0
-
-RANK_NAME = "Pharma Initiate"
-
 if "xp" not in st.session_state:
-    st.session_state.xp = INITIAL_XP
+    st.session_state.xp = 0
 
 if "level" not in st.session_state:
-    st.session_state.level = INITIAL_LEVEL
+    st.session_state.level = 1
 
 if "streak" not in st.session_state:
-    st.session_state.streak = INITIAL_STREAK
+    st.session_state.streak = 0
 
 if "badges" not in st.session_state:
-    st.session_state.badges = INITIAL_BADGES
+    st.session_state.badges = 0
 
 if "missions_completed" not in st.session_state:
-    st.session_state.missions_completed = INITIAL_MISSIONS
+    st.session_state.missions_completed = 0
+
+if "selected_page" not in st.session_state:
+    st.session_state.selected_page = "🏠 Home"
 
 
 # ============================================================
@@ -102,8 +97,7 @@ if level_end > level_start:
         (
             (st.session_state.xp - level_start)
             / (level_end - level_start)
-        )
-        * 100
+        ) * 100
     )
 
 else:
@@ -129,34 +123,36 @@ st.markdown(
     """
     <style>
 
-    /* ======================================================
+    /* ========================================================
        GLOBAL
-       ====================================================== */
+       ======================================================== */
 
     .stApp {
 
         background:
             radial-gradient(
-                circle at 5% 5%,
-                rgba(168,85,247,0.10),
-                transparent 23%
+                circle at 8% 8%,
+                rgba(124,58,237,0.16),
+                transparent 25%
             ),
             radial-gradient(
-                circle at 95% 8%,
-                rgba(16,185,129,0.10),
-                transparent 22%
+                circle at 92% 12%,
+                rgba(6,182,212,0.12),
+                transparent 24%
             ),
             radial-gradient(
                 circle at 50% 100%,
-                rgba(249,115,22,0.07),
+                rgba(236,72,153,0.10),
                 transparent 28%
             ),
-            #fafaf9;
+            #0b1020;
+
+        color: #f8fafc;
     }
 
     .block-container {
 
-        max-width: 1450px;
+        max-width: 1500px;
 
         padding-top: 1.5rem;
 
@@ -172,28 +168,32 @@ st.markdown(
     }
 
 
-    /* ======================================================
+    /* ========================================================
        SIDEBAR
-       ====================================================== */
+       ======================================================== */
 
     section[data-testid="stSidebar"] {
 
         background:
             linear-gradient(
                 180deg,
-                #fff7ed 0%,
-                #faf5ff 48%,
-                #ecfdf5 100%
+                #11152a 0%,
+                #15102a 50%,
+                #0d1c27 100%
             );
 
         border-right:
-            1px solid #e5e7eb;
+            1px solid rgba(255,255,255,0.08);
+    }
+
+    section[data-testid="stSidebar"] * {
+        color: #f8fafc;
     }
 
     .sidebar-brand {
 
         padding:
-            10px 5px 18px 5px;
+            8px 5px 18px 5px;
     }
 
     .brand-row {
@@ -202,13 +202,13 @@ st.markdown(
 
         align-items: center;
 
-        gap: 12px;
+        gap: 13px;
     }
 
     .sidebar-logo {
 
-        width: 53px;
-        height: 53px;
+        width: 54px;
+        height: 54px;
 
         display: flex;
 
@@ -221,33 +221,33 @@ st.markdown(
             linear-gradient(
                 135deg,
                 #7c3aed,
-                #db2777,
+                #ec4899,
                 #f97316
             );
 
         box-shadow:
-            0 12px 25px
-            rgba(124,58,237,0.24);
+            0 12px 30px
+            rgba(236,72,153,0.30);
 
         font-size: 27px;
     }
 
     .sidebar-title {
 
-        color: #18181b;
+        color: #ffffff;
 
         font-size: 20px;
 
         font-weight: 950;
 
-        letter-spacing: -0.6px;
+        letter-spacing: -0.5px;
     }
 
     .sidebar-subtitle {
 
-        margin-top: 2px;
+        margin-top: 3px;
 
-        color: #78716c;
+        color: #94a3b8;
 
         font-size: 8px;
 
@@ -258,11 +258,11 @@ st.markdown(
 
     .sidebar-section {
 
-        margin-top: 18px;
+        margin-top: 17px;
 
         margin-bottom: 7px;
 
-        color: #a16207;
+        color: #fbbf24;
 
         font-size: 9px;
 
@@ -272,40 +272,58 @@ st.markdown(
     }
 
     .sidebar-section.play {
-
-        color: #7c3aed;
+        color: #c084fc;
     }
 
     .sidebar-section.learn {
-
-        color: #059669;
+        color: #34d399;
     }
 
     .sidebar-section.account {
+        color: #f472b6;
+    }
 
-        color: #db2777;
+    section[data-testid="stSidebar"] .stRadio label {
+
+        color: #cbd5e1 !important;
+
+        font-size: 11px !important;
+
+        font-weight: 700 !important;
+    }
+
+    section[data-testid="stSidebar"] .stRadio label:hover {
+
+        color: white !important;
     }
 
     .sidebar-footer-card {
 
         margin-top: 18px;
 
-        padding: 15px;
+        padding: 17px;
 
-        border-radius: 18px;
+        border-radius: 20px;
 
-        background: rgba(255,255,255,0.85);
+        background:
+            linear-gradient(
+                135deg,
+                rgba(124,58,237,0.20),
+                rgba(236,72,153,0.12)
+            );
 
-        border: 1px solid #e7e5e4;
+        border:
+            1px solid
+            rgba(255,255,255,0.10);
 
         box-shadow:
-            0 10px 25px
-            rgba(28,25,23,0.05);
+            0 15px 35px
+            rgba(0,0,0,0.20);
     }
 
     .footer-label {
 
-        color: #a8a29e;
+        color: #94a3b8;
 
         font-size: 8px;
 
@@ -316,9 +334,9 @@ st.markdown(
 
     .footer-rank {
 
-        margin-top: 4px;
+        margin-top: 5px;
 
-        color: #7c3aed;
+        color: #c084fc;
 
         font-size: 15px;
 
@@ -326,24 +344,18 @@ st.markdown(
     }
 
 
-    /* ======================================================
+    /* ========================================================
        TOP BAR
-       ====================================================== */
+       ======================================================== */
 
     .topbar {
-
-        display: flex;
-
-        justify-content: space-between;
-
-        align-items: center;
 
         margin-bottom: 20px;
     }
 
     .eyebrow {
 
-        color: #7c3aed;
+        color: #a78bfa;
 
         font-size: 9px;
 
@@ -354,11 +366,11 @@ st.markdown(
 
     .top-title {
 
-        margin-top: 4px;
+        margin-top: 5px;
 
-        color: #18181b;
+        color: #ffffff;
 
-        font-size: 30px;
+        font-size: 31px;
 
         font-weight: 950;
 
@@ -367,17 +379,17 @@ st.markdown(
 
     .top-subtitle {
 
-        margin-top: 3px;
+        margin-top: 4px;
 
-        color: #78716c;
+        color: #94a3b8;
 
         font-size: 12px;
     }
 
 
-    /* ======================================================
-       WELCOME CARD
-       ====================================================== */
+    /* ========================================================
+       WELCOME HERO
+       ======================================================== */
 
     .welcome-card {
 
@@ -385,31 +397,54 @@ st.markdown(
 
         overflow: hidden;
 
-        padding: 34px;
+        padding: 36px;
 
         border-radius: 30px;
 
         background:
             radial-gradient(
-                circle at 90% 10%,
-                rgba(251,191,36,0.28),
+                circle at 88% 15%,
+                rgba(251,191,36,0.35),
                 transparent 20%
             ),
             radial-gradient(
-                circle at 15% 90%,
-                rgba(236,72,153,0.20),
+                circle at 15% 100%,
+                rgba(6,182,212,0.30),
                 transparent 25%
             ),
             linear-gradient(
                 135deg,
-                #4c1d95,
-                #7c3aed 48%,
-                #db2777
+                #312e81,
+                #7c3aed 45%,
+                #db2777 78%,
+                #f97316
             );
 
+        border:
+            1px solid
+            rgba(255,255,255,0.14);
+
         box-shadow:
-            0 25px 60px
-            rgba(91,33,182,0.20);
+            0 30px 70px
+            rgba(124,58,237,0.30);
+    }
+
+    .welcome-card::after {
+
+        content: "";
+
+        position: absolute;
+
+        width: 220px;
+        height: 220px;
+
+        right: -70px;
+        bottom: -90px;
+
+        border-radius: 50%;
+
+        background:
+            rgba(255,255,255,0.08);
     }
 
     .welcome-label {
@@ -427,7 +462,7 @@ st.markdown(
             1px solid
             rgba(255,255,255,0.20);
 
-        color: #fef3c7;
+        color: #fde68a;
 
         font-size: 8px;
 
@@ -442,7 +477,7 @@ st.markdown(
 
         color: white;
 
-        font-size: 37px;
+        font-size: 38px;
 
         line-height: 1.1;
 
@@ -453,7 +488,7 @@ st.markdown(
 
     .welcome-text {
 
-        max-width: 650px;
+        max-width: 700px;
 
         margin-top: 10px;
 
@@ -461,21 +496,25 @@ st.markdown(
 
         font-size: 13px;
 
-        line-height: 1.6;
+        line-height: 1.65;
     }
 
     .welcome-pill {
 
         display: inline-block;
 
-        margin-top: 19px;
+        margin-top: 20px;
 
-        padding: 9px 14px;
+        padding: 10px 15px;
 
-        border-radius: 12px;
+        border-radius: 13px;
 
         background:
-            rgba(255,255,255,0.12);
+            rgba(0,0,0,0.16);
+
+        border:
+            1px solid
+            rgba(255,255,255,0.13);
 
         color: white;
 
@@ -485,9 +524,9 @@ st.markdown(
     }
 
 
-    /* ======================================================
-       QUICK STATS
-       ====================================================== */
+    /* ========================================================
+       STAT CARDS
+       ======================================================== */
 
     .stats-area {
 
@@ -502,24 +541,33 @@ st.markdown(
 
         border-radius: 21px;
 
-        background: white;
+        background:
+            linear-gradient(
+                145deg,
+                #151b32,
+                #101628
+            );
 
-        border: 1px solid #e7e5e4;
+        border:
+            1px solid
+            rgba(255,255,255,0.08);
 
         box-shadow:
-            0 10px 25px
-            rgba(28,25,23,0.05);
+            0 15px 35px
+            rgba(0,0,0,0.18);
 
-        transition: 0.25s ease;
+        transition:
+            transform 0.25s ease,
+            box-shadow 0.25s ease;
     }
 
     .mini-card:hover {
 
-        transform: translateY(-4px);
+        transform: translateY(-5px);
 
         box-shadow:
-            0 18px 35px
-            rgba(28,25,23,0.09);
+            0 22px 45px
+            rgba(0,0,0,0.28);
     }
 
     .mini-icon {
@@ -531,16 +579,16 @@ st.markdown(
 
         margin-top: 5px;
 
-        color: #18181b;
+        color: #ffffff;
 
-        font-size: 25px;
+        font-size: 26px;
 
         font-weight: 950;
     }
 
     .mini-label {
 
-        color: #78716c;
+        color: #cbd5e1;
 
         font-size: 8px;
 
@@ -553,15 +601,15 @@ st.markdown(
 
         margin-top: 4px;
 
-        color: #a8a29e;
+        color: #64748b;
 
         font-size: 9px;
     }
 
 
-    /* ======================================================
+    /* ========================================================
        LEVEL CARD
-       ====================================================== */
+       ======================================================== */
 
     .level-card {
 
@@ -571,13 +619,20 @@ st.markdown(
 
         border-radius: 23px;
 
-        background: white;
+        background:
+            linear-gradient(
+                145deg,
+                #161d36,
+                #11172a
+            );
 
-        border: 1px solid #e7e5e4;
+        border:
+            1px solid
+            rgba(255,255,255,0.08);
 
         box-shadow:
-            0 10px 25px
-            rgba(28,25,23,0.05);
+            0 15px 35px
+            rgba(0,0,0,0.18);
     }
 
     .level-top {
@@ -596,16 +651,16 @@ st.markdown(
         align-items: center;
         justify-content: center;
 
-        width: 55px;
-        height: 55px;
+        width: 57px;
+        height: 57px;
 
-        border-radius: 17px;
+        border-radius: 18px;
 
         background:
             linear-gradient(
                 135deg,
                 #f59e0b,
-                #f97316
+                #ef4444
             );
 
         color: white;
@@ -615,8 +670,8 @@ st.markdown(
         font-weight: 950;
 
         box-shadow:
-            0 10px 22px
-            rgba(249,115,22,0.20);
+            0 12px 25px
+            rgba(249,115,22,0.25);
     }
 
     .level-title {
@@ -628,7 +683,7 @@ st.markdown(
 
     .level-small {
 
-        color: #a8a29e;
+        color: #64748b;
 
         font-size: 8px;
 
@@ -641,7 +696,7 @@ st.markdown(
 
         margin-top: 3px;
 
-        color: #18181b;
+        color: #ffffff;
 
         font-size: 18px;
 
@@ -650,7 +705,7 @@ st.markdown(
 
     .level-xp {
 
-        color: #7c3aed;
+        color: #c084fc;
 
         font-size: 11px;
 
@@ -669,14 +724,12 @@ st.markdown(
 
         border-radius: 999px;
 
-        background: #f1f5f9;
+        background: #1e293b;
     }
 
     .level-fill {
 
         height: 100%;
-
-        width: 0%;
 
         border-radius: 999px;
 
@@ -687,6 +740,10 @@ st.markdown(
                 #ec4899,
                 #f59e0b
             );
+
+        box-shadow:
+            0 0 14px
+            rgba(236,72,153,0.45);
     }
 
     .level-bottom {
@@ -697,25 +754,25 @@ st.markdown(
 
         margin-top: 7px;
 
-        color: #a8a29e;
+        color: #64748b;
 
         font-size: 9px;
     }
 
 
-    /* ======================================================
-       SECTION
-       ====================================================== */
+    /* ========================================================
+       SECTION HEADINGS
+       ======================================================== */
 
     .section-heading {
 
-        margin-top: 31px;
+        margin-top: 35px;
 
         margin-bottom: 5px;
 
-        color: #18181b;
+        color: #ffffff;
 
-        font-size: 23px;
+        font-size: 25px;
 
         font-weight: 950;
 
@@ -724,48 +781,160 @@ st.markdown(
 
     .section-caption {
 
-        margin-bottom: 16px;
+        margin-bottom: 17px;
 
-        color: #78716c;
+        color: #94a3b8;
 
         font-size: 11px;
     }
 
 
-    /* ======================================================
+    /* ========================================================
        MISSION CARDS
-       ====================================================== */
+       ======================================================== */
 
     .mission-card {
 
-        min-height: 235px;
+        position: relative;
 
-        padding: 21px;
+        min-height: 215px;
 
-        margin-bottom: 17px;
+        padding: 22px;
 
-        border-radius: 23px;
+        margin-bottom: 4px;
 
-        background: white;
+        border-radius: 24px;
 
-        border: 1px solid #e7e5e4;
+        overflow: hidden;
+
+        color: white;
+
+        border:
+            1px solid
+            rgba(255,255,255,0.12);
 
         box-shadow:
-            0 10px 25px
-            rgba(28,25,23,0.05);
+            0 18px 38px
+            rgba(0,0,0,0.22);
 
         transition:
             transform 0.25s ease,
             box-shadow 0.25s ease;
     }
 
+    .mission-card::after {
+
+        content: "";
+
+        position: absolute;
+
+        width: 130px;
+        height: 130px;
+
+        right: -45px;
+        bottom: -55px;
+
+        border-radius: 50%;
+
+        background:
+            rgba(255,255,255,0.10);
+    }
+
     .mission-card:hover {
 
-        transform: translateY(-6px);
+        transform: translateY(-7px) scale(1.01);
 
         box-shadow:
-            0 22px 40px
-            rgba(28,25,23,0.10);
+            0 25px 55px
+            rgba(0,0,0,0.35);
+    }
+
+    .mission-purple {
+
+        background:
+            linear-gradient(
+                145deg,
+                #6d28d9,
+                #9333ea,
+                #c026d3
+            );
+    }
+
+    .mission-blue {
+
+        background:
+            linear-gradient(
+                145deg,
+                #1d4ed8,
+                #2563eb,
+                #0891b2
+            );
+    }
+
+    .mission-pink {
+
+        background:
+            linear-gradient(
+                145deg,
+                #be185d,
+                #db2777,
+                #9333ea
+            );
+    }
+
+    .mission-orange {
+
+        background:
+            linear-gradient(
+                145deg,
+                #c2410c,
+                #ea580c,
+                #dc2626
+            );
+    }
+
+    .mission-indigo {
+
+        background:
+            linear-gradient(
+                145deg,
+                #3730a3,
+                #4f46e5,
+                #2563eb
+            );
+    }
+
+    .mission-green {
+
+        background:
+            linear-gradient(
+                145deg,
+                #047857,
+                #059669,
+                #0d9488
+            );
+    }
+
+    .mission-yellow {
+
+        background:
+            linear-gradient(
+                145deg,
+                #b45309,
+                #d97706,
+                #ea580c
+            );
+    }
+
+    .mission-red {
+
+        background:
+            linear-gradient(
+                145deg,
+                #b91c1c,
+                #dc2626,
+                #db2777
+            );
     }
 
     .mission-top {
@@ -775,51 +944,36 @@ st.markdown(
         justify-content: space-between;
 
         align-items: center;
+
+        position: relative;
+
+        z-index: 2;
     }
 
     .mission-icon {
 
-        width: 54px;
-        height: 54px;
+        width: 58px;
+        height: 58px;
 
         display: flex;
 
         align-items: center;
         justify-content: center;
 
-        border-radius: 17px;
+        border-radius: 18px;
 
-        font-size: 27px;
-    }
+        background:
+            rgba(255,255,255,0.16);
 
-    .icon-purple {
+        border:
+            1px solid
+            rgba(255,255,255,0.20);
 
-        background: #f3e8ff;
-    }
+        font-size: 29px;
 
-    .icon-green {
-
-        background: #d1fae5;
-    }
-
-    .icon-orange {
-
-        background: #ffedd5;
-    }
-
-    .icon-pink {
-
-        background: #fce7f3;
-    }
-
-    .icon-yellow {
-
-        background: #fef3c7;
-    }
-
-    .icon-teal {
-
-        background: #ccfbf1;
+        box-shadow:
+            0 10px 20px
+            rgba(0,0,0,0.12);
     }
 
     .mission-tag {
@@ -828,9 +982,10 @@ st.markdown(
 
         border-radius: 999px;
 
-        background: #fafaf9;
+        background:
+            rgba(0,0,0,0.18);
 
-        color: #78716c;
+        color: #ffffff;
 
         font-size: 7px;
 
@@ -841,22 +996,30 @@ st.markdown(
 
     .mission-name {
 
-        margin-top: 16px;
+        position: relative;
 
-        color: #18181b;
+        z-index: 2;
 
-        font-size: 17px;
+        margin-top: 17px;
+
+        color: white;
+
+        font-size: 18px;
 
         font-weight: 950;
     }
 
     .mission-description {
 
-        min-height: 55px;
+        position: relative;
+
+        z-index: 2;
+
+        min-height: 49px;
 
         margin-top: 7px;
 
-        color: #78716c;
+        color: rgba(255,255,255,0.83);
 
         font-size: 10px;
 
@@ -865,9 +1028,13 @@ st.markdown(
 
     .mission-reward {
 
-        margin-top: 12px;
+        position: relative;
 
-        color: #f59e0b;
+        z-index: 2;
+
+        margin-top: 11px;
+
+        color: #ffffff;
 
         font-size: 9px;
 
@@ -875,9 +1042,59 @@ st.markdown(
     }
 
 
-    /* ======================================================
+    /* ========================================================
+       CLICKABLE GAME BUTTON
+       ======================================================== */
+
+    .game-button {
+
+        margin-top: 13px;
+    }
+
+    .game-button button {
+
+        width: 100% !important;
+
+        min-height: 42px !important;
+
+        border-radius: 12px !important;
+
+        border:
+            1px solid
+            rgba(255,255,255,0.20) !important;
+
+        background:
+            rgba(255,255,255,0.13) !important;
+
+        color: white !important;
+
+        font-size: 10px !important;
+
+        font-weight: 900 !important;
+
+        transition: 0.2s ease !important;
+    }
+
+    .game-button button:hover {
+
+        background:
+            rgba(255,255,255,0.24) !important;
+
+        border-color:
+            rgba(255,255,255,0.40) !important;
+
+        transform:
+            translateY(-2px) !important;
+
+        box-shadow:
+            0 8px 20px
+            rgba(0,0,0,0.18) !important;
+    }
+
+
+    /* ========================================================
        OTHER PAGES
-       ====================================================== */
+       ======================================================== */
 
     .page-card {
 
@@ -885,13 +1102,30 @@ st.markdown(
 
         border-radius: 25px;
 
-        background: white;
+        background:
+            linear-gradient(
+                145deg,
+                #151b32,
+                #101628
+            );
 
-        border: 1px solid #e7e5e4;
+        border:
+            1px solid
+            rgba(255,255,255,0.08);
 
         box-shadow:
-            0 12px 30px
-            rgba(28,25,23,0.06);
+            0 18px 40px
+            rgba(0,0,0,0.20);
+    }
+
+    .page-card h2 {
+
+        color: #ffffff;
+    }
+
+    .page-card p {
+
+        color: #94a3b8;
     }
 
     .page-badge {
@@ -902,9 +1136,14 @@ st.markdown(
 
         border-radius: 999px;
 
-        background: #f3e8ff;
+        background:
+            rgba(124,58,237,0.18);
 
-        color: #7c3aed;
+        border:
+            1px solid
+            rgba(167,139,250,0.20);
+
+        color: #c4b5fd;
 
         font-size: 8px;
 
@@ -914,9 +1153,38 @@ st.markdown(
     }
 
 
-    /* ======================================================
+    /* ========================================================
+       STREAMLIT INPUTS
+       ======================================================== */
+
+    div[data-baseweb="input"],
+    div[data-baseweb="textarea"],
+    div[data-baseweb="select"] {
+
+        background: #151b32 !important;
+    }
+
+    input,
+    textarea {
+
+        color: #ffffff !important;
+    }
+
+    label {
+
+        color: #cbd5e1 !important;
+    }
+
+    .stSelectbox div,
+    .stTextInput div {
+
+        border-radius: 12px;
+    }
+
+
+    /* ========================================================
        BUTTONS
-       ====================================================== */
+       ======================================================== */
 
     .stButton > button {
 
@@ -924,9 +1192,20 @@ st.markdown(
 
         border-radius: 13px;
 
-        border: none;
+        border:
+            1px solid
+            rgba(124,58,237,0.35);
 
-        font-weight: 850;
+        background:
+            linear-gradient(
+                135deg,
+                #7c3aed,
+                #db2777
+            );
+
+        color: white;
+
+        font-weight: 900;
 
         transition: 0.2s ease;
     }
@@ -936,14 +1215,57 @@ st.markdown(
         transform: translateY(-2px);
 
         box-shadow:
-            0 8px 20px
-            rgba(124,58,237,0.15);
+            0 10px 25px
+            rgba(124,58,237,0.30);
     }
 
 
-    /* ======================================================
+    /* ========================================================
+       METRICS
+       ======================================================== */
+
+    [data-testid="stMetric"] {
+
+        background:
+            linear-gradient(
+                145deg,
+                #151b32,
+                #101628
+            );
+
+        border:
+            1px solid
+            rgba(255,255,255,0.08);
+
+        border-radius: 18px;
+
+        padding: 18px;
+    }
+
+    [data-testid="stMetricLabel"] {
+
+        color: #94a3b8 !important;
+    }
+
+    [data-testid="stMetricValue"] {
+
+        color: #ffffff !important;
+    }
+
+
+    /* ========================================================
+       ALERTS
+       ======================================================== */
+
+    .stAlert {
+
+        border-radius: 15px;
+    }
+
+
+    /* ========================================================
        MOBILE
-       ====================================================== */
+       ======================================================== */
 
     @media (max-width: 900px) {
 
@@ -1017,7 +1339,8 @@ with st.sidebar:
             "🏠 Home",
             "📊 My Progress"
         ],
-        label_visibility="collapsed"
+        label_visibility="collapsed",
+        key="main_navigation"
     )
 
     st.html(
@@ -1038,7 +1361,8 @@ with st.sidebar:
             "🔐 Escape Room",
             "🧬 Build the Patient"
         ],
-        label_visibility="collapsed"
+        label_visibility="collapsed",
+        key="play_navigation"
     )
 
     st.html(
@@ -1055,7 +1379,8 @@ with st.sidebar:
             "❓ AI Quiz",
             "🔥 Daily Challenge"
         ],
-        label_visibility="collapsed"
+        label_visibility="collapsed",
+        key="learn_navigation"
     )
 
     st.html(
@@ -1071,7 +1396,8 @@ with st.sidebar:
         [
             "🏆 My Profile"
         ],
-        label_visibility="collapsed"
+        label_visibility="collapsed",
+        key="account_navigation"
     )
 
 
@@ -1079,31 +1405,36 @@ with st.sidebar:
 # DETERMINE PAGE
 # ============================================================
 
-if main_page != "🏠 Home":
+if st.session_state.selected_page != "🏠 Home":
 
-    page = main_page
-
-elif play_page in [
-    "🕵️ Drug Detective",
-    "🩺 Patient Case",
-    "🗣️ AI Patient",
-    "⚔️ Pharma Battle",
-    "🔐 Escape Room",
-    "🧬 Build the Patient"
-]:
-
-    page = play_page
-
-elif learn_page in [
-    "❓ AI Quiz",
-    "🔥 Daily Challenge"
-]:
-
-    page = learn_page
+    page = st.session_state.selected_page
 
 else:
 
-    page = account_page
+    if main_page != "🏠 Home":
+        page = main_page
+
+    elif play_page in [
+        "🕵️ Drug Detective",
+        "🩺 Patient Case",
+        "🗣️ AI Patient",
+        "⚔️ Pharma Battle",
+        "🔐 Escape Room",
+        "🧬 Build the Patient"
+    ]:
+
+        page = play_page
+
+    elif learn_page in [
+        "❓ AI Quiz",
+        "🔥 Daily Challenge"
+    ]:
+
+        page = learn_page
+
+    else:
+
+        page = account_page
 
 
 # ============================================================
@@ -1127,7 +1458,7 @@ with st.sidebar:
             <div style="
                 margin-top:10px;
                 font-size:10px;
-                color:#78716c;
+                color:#cbd5e1;
                 font-weight:700;
             ">
                 ⭐ {st.session_state.xp} XP
@@ -1137,7 +1468,7 @@ with st.sidebar:
                 margin-top:8px;
                 height:6px;
                 border-radius:10px;
-                background:#e7e5e4;
+                background:#1e293b;
                 overflow:hidden;
             ">
 
@@ -1162,7 +1493,7 @@ with st.sidebar:
 
 
 # ============================================================
-# HOME
+# HOME DASHBOARD
 # ============================================================
 
 if page == "🏠 Home":
@@ -1326,8 +1657,8 @@ if page == "🏠 Home":
 
                 <div
                     class="level-fill"
-                    style="width:{progress_percent}%;">
-                </div>
+                    style="width:{progress_percent}%;"
+                ></div>
 
             </div>
 
@@ -1355,11 +1686,11 @@ if page == "🏠 Home":
     st.html(
         """
         <div class="section-heading">
-            Mission Hub
+            🎮 Mission Hub
         </div>
 
         <div class="section-caption">
-            Choose how you want to train today.
+            Choose your next challenge. Every mission trains a different pharmacy skill.
         </div>
         """
     )
@@ -1373,7 +1704,7 @@ if page == "🏠 Home":
             "Investigate clues and identify the mystery medicine.",
             "DEDUCTION",
             "+50 XP",
-            "icon-purple"
+            "mission-purple"
         ),
 
         (
@@ -1382,7 +1713,7 @@ if page == "🏠 Home":
             "Think like a clinical pharmacist and solve a fictional case.",
             "CLINICAL",
             "+75 XP",
-            "icon-green"
+            "mission-blue"
         ),
 
         (
@@ -1391,7 +1722,7 @@ if page == "🏠 Home":
             "Practice counselling with realistic patient personalities.",
             "COUNSELLING",
             "+60 XP",
-            "icon-pink"
+            "mission-pink"
         ),
 
         (
@@ -1400,7 +1731,7 @@ if page == "🏠 Home":
             "Answer rapid-fire pharmacy questions.",
             "BATTLE",
             "+50 XP",
-            "icon-orange"
+            "mission-orange"
         ),
 
         (
@@ -1409,7 +1740,7 @@ if page == "🏠 Home":
             "Solve a pharmacy mystery before time runs out.",
             "MYSTERY",
             "+100 XP",
-            "icon-purple"
+            "mission-indigo"
         ),
 
         (
@@ -1418,7 +1749,7 @@ if page == "🏠 Home":
             "Explore treatment decisions in a fictional patient.",
             "SIMULATION",
             "+100 XP",
-            "icon-teal"
+            "mission-green"
         ),
 
         (
@@ -1427,7 +1758,7 @@ if page == "🏠 Home":
             "Create a personalized pharmacy quiz with AI.",
             "KNOWLEDGE",
             "+50 XP",
-            "icon-yellow"
+            "mission-yellow"
         ),
 
         (
@@ -1436,7 +1767,7 @@ if page == "🏠 Home":
             "Complete today's challenge and earn bonus XP.",
             "DAILY",
             "+75 XP",
-            "icon-orange"
+            "mission-red"
         )
 
     ]
@@ -1447,20 +1778,17 @@ if page == "🏠 Home":
 
     for i, mission in enumerate(missions):
 
-        icon, title, description, category, reward, icon_class = mission
+        icon, title, description, category, reward, card_class = mission
 
         with columns[i % 4]:
 
             st.html(
                 f"""
-                <div class="mission-card">
+                <div class="mission-card {card_class}">
 
                     <div class="mission-top">
 
-                        <div class="
-                            mission-icon
-                            {icon_class}
-                        ">
+                        <div class="mission-icon">
                             {icon}
                         </div>
 
@@ -1486,6 +1814,22 @@ if page == "🏠 Home":
                 """
             )
 
+            # ------------------------------------------------
+            # CLICKABLE BUTTON
+            # ------------------------------------------------
+
+            if st.button(
+                f"▶ OPEN {title.upper()}",
+                key=f"mission_{i}",
+                use_container_width=True
+            ):
+
+                st.session_state.selected_page = (
+                    f"{icon} {title}"
+                )
+
+                st.rerun()
+
 
 # ============================================================
 # MY PROGRESS
@@ -1508,7 +1852,7 @@ elif page == "📊 My Progress":
                 </div>
 
                 <div class="top-subtitle">
-                    Your pharmacy learning journey starts here.
+                    Track your pharmacy learning journey.
                 </div>
 
             </div>
@@ -1538,13 +1882,13 @@ elif page == "📊 My Progress":
 
                 <div
                     class="level-fill"
-                    style="width:{progress_percent}%;">
-                </div>
+                    style="width:{progress_percent}%;"
+                ></div>
 
             </div>
 
             <p style="
-                color:#78716c;
+                color:#64748b;
                 font-size:11px;
                 margin-top:8px;
             ">
@@ -1560,21 +1904,18 @@ elif page == "📊 My Progress":
     p1, p2, p3 = st.columns(3)
 
     with p1:
-
         st.metric(
             "⭐ Total XP",
             st.session_state.xp
         )
 
     with p2:
-
         st.metric(
             "🏆 Badges",
             st.session_state.badges
         )
 
     with p3:
-
         st.metric(
             "🧠 Missions",
             st.session_state.missions_completed
@@ -2050,7 +2391,7 @@ elif page in [
             </h2>
 
             <p style="
-                color:#78716c;
+                color:#94a3b8;
                 font-size:13px;
             ">
                 This feature is part of the PharmaQuest roadmap.
@@ -2100,9 +2441,7 @@ elif page == "🏆 My Profile":
                 🧬 {level_name}
             </h2>
 
-            <p style="
-                color:#78716c;
-            ">
+            <p>
                 Your PharmaQuest journey is just beginning.
             </p>
 
@@ -2110,18 +2449,18 @@ elif page == "🏆 My Profile":
                 margin-top:25px;
                 padding:18px;
                 border-radius:18px;
-                background:#fafaf9;
-                border:1px solid #e7e5e4;
+                background:#101628;
+                border:1px solid rgba(255,255,255,0.08);
             ">
 
-                <strong>
+                <strong style="color:#ffffff;">
                     ⭐ {st.session_state.xp} XP
                 </strong>
 
                 <br>
 
                 <span style="
-                    color:#78716c;
+                    color:#64748b;
                     font-size:11px;
                 ">
                     Experience earned
