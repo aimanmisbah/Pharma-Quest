@@ -1399,7 +1399,7 @@ Do not reveal the correct answer immediately.
                 try:
 
                     response = client.models.generate_content(
-                        model="gemini-2.5-flash",
+                        model="gemini-3.6-flash",
                         contents=prompt
                     )
 
@@ -1510,7 +1510,7 @@ Keep the response realistic and educational.
                 try:
 
                     response = client.models.generate_content(
-                        model="gemini-2.5-flash",
+                        model="gemini-3.6-flash",
                         contents=prompt
                     )
 
@@ -1592,7 +1592,7 @@ Keep the questions educational and clinically relevant.
                 try:
 
                     response = client.models.generate_content(
-                        model="gemini-2.5-flash",
+                        model="gemini-3.6-flash",
                         contents=prompt
                     )
 
