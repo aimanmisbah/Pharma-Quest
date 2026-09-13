@@ -15,11 +15,41 @@ st.set_page_config(
 
 
 # ============================================================
+# INITIAL STUDENT STATE
+# ============================================================
+
+INITIAL_XP = 0
+INITIAL_LEVEL = 1
+INITIAL_STREAK = 0
+INITIAL_BADGES = 0
+INITIAL_MISSIONS = 0
+
+RANK_NAME = "Pharma Initiate"
+
+if "xp" not in st.session_state:
+    st.session_state.xp = INITIAL_XP
+
+if "level" not in st.session_state:
+    st.session_state.level = INITIAL_LEVEL
+
+if "streak" not in st.session_state:
+    st.session_state.streak = INITIAL_STREAK
+
+if "badges" not in st.session_state:
+    st.session_state.badges = INITIAL_BADGES
+
+if "missions_completed" not in st.session_state:
+    st.session_state.missions_completed = INITIAL_MISSIONS
+
+
+# ============================================================
 # GEMINI CONNECTION
 # ============================================================
 
 def get_gemini_client():
+
     try:
+
         api_key = st.secrets.get("GEMINI_API_KEY")
 
         if not api_key:
@@ -33,7 +63,62 @@ def get_gemini_client():
         return genai.Client(api_key=api_key)
 
     except Exception:
+
         return None
+
+
+# ============================================================
+# XP / LEVEL SYSTEM
+# ============================================================
+
+def get_level_info(xp):
+
+    levels = [
+        (1, "Pharma Initiate", 0, 100),
+        (2, "Drug Seeker", 100, 250),
+        (3, "Pharma Strategist", 250, 500),
+        (4, "Clinical Specialist", 500, 850),
+        (5, "Therapeutics Master", 850, 1300),
+        (6, "PharmaQuest Elite", 1300, 2000),
+    ]
+
+    current = levels[0]
+
+    for level in levels:
+
+        if xp >= level[2]:
+            current = level
+
+    return current
+
+
+level_number, level_name, level_start, level_end = get_level_info(
+    st.session_state.xp
+)
+
+if level_end > level_start:
+
+    progress_percent = int(
+        (
+            (st.session_state.xp - level_start)
+            / (level_end - level_start)
+        )
+        * 100
+    )
+
+else:
+
+    progress_percent = 0
+
+progress_percent = max(
+    0,
+    min(100, progress_percent)
+)
+
+xp_to_next = max(
+    0,
+    level_end - st.session_state.xp
+)
 
 
 # ============================================================
@@ -49,28 +134,32 @@ st.markdown(
        ====================================================== */
 
     .stApp {
+
         background:
             radial-gradient(
                 circle at 5% 5%,
-                rgba(99,102,241,0.10),
-                transparent 25%
+                rgba(168,85,247,0.10),
+                transparent 23%
             ),
             radial-gradient(
-                circle at 95% 10%,
-                rgba(6,182,212,0.10),
-                transparent 25%
+                circle at 95% 8%,
+                rgba(16,185,129,0.10),
+                transparent 22%
             ),
-            linear-gradient(
-                135deg,
-                #f8fafc 0%,
-                #eef2ff 50%,
-                #f8fafc 100%
-            );
+            radial-gradient(
+                circle at 50% 100%,
+                rgba(249,115,22,0.07),
+                transparent 28%
+            ),
+            #fafaf9;
     }
 
     .block-container {
+
         max-width: 1450px;
-        padding-top: 2rem;
+
+        padding-top: 1.5rem;
+
         padding-bottom: 4rem;
     }
 
@@ -88,292 +177,135 @@ st.markdown(
        ====================================================== */
 
     section[data-testid="stSidebar"] {
+
         background:
             linear-gradient(
                 180deg,
-                #ffffff 0%,
-                #f1f5ff 55%,
-                #eefcff 100%
+                #fff7ed 0%,
+                #faf5ff 48%,
+                #ecfdf5 100%
             );
 
-        border-right: 1px solid #e2e8f0;
+        border-right:
+            1px solid #e5e7eb;
     }
 
     .sidebar-brand {
-        padding: 15px 5px 22px 5px;
+
+        padding:
+            10px 5px 18px 5px;
+    }
+
+    .brand-row {
+
+        display: flex;
+
+        align-items: center;
+
+        gap: 12px;
     }
 
     .sidebar-logo {
-        width: 64px;
-        height: 64px;
+
+        width: 53px;
+        height: 53px;
 
         display: flex;
+
         align-items: center;
         justify-content: center;
 
-        border-radius: 21px;
+        border-radius: 17px;
 
         background:
             linear-gradient(
                 135deg,
-                #4f46e5,
                 #7c3aed,
-                #06b6d4
+                #db2777,
+                #f97316
             );
 
         box-shadow:
-            0 15px 30px rgba(79,70,229,0.25);
+            0 12px 25px
+            rgba(124,58,237,0.24);
 
-        font-size: 32px;
-        margin-bottom: 15px;
+        font-size: 27px;
     }
 
     .sidebar-title {
-        color: #172554;
+
+        color: #18181b;
+
         font-size: 20px;
+
         font-weight: 950;
-        letter-spacing: -0.5px;
+
+        letter-spacing: -0.6px;
     }
 
     .sidebar-subtitle {
-        margin-top: 4px;
-        color: #94a3b8;
-        font-size: 10px;
-        font-weight: 800;
-        letter-spacing: 1px;
-    }
 
+        margin-top: 2px;
 
-    /* ======================================================
-       COMMAND CENTER
-       ====================================================== */
+        color: #78716c;
 
-    .command-center {
-        position: relative;
-        overflow: hidden;
+        font-size: 8px;
 
-        min-height: 350px;
-        padding: 45px 52px;
-
-        border-radius: 34px;
-
-        background:
-            radial-gradient(
-                circle at 88% 18%,
-                rgba(34,211,238,0.25),
-                transparent 23%
-            ),
-            radial-gradient(
-                circle at 10% 95%,
-                rgba(168,85,247,0.28),
-                transparent 27%
-            ),
-            linear-gradient(
-                135deg,
-                #111827,
-                #312e81 55%,
-                #0e7490
-            );
-
-        box-shadow:
-            0 30px 70px rgba(15,23,42,0.20),
-            inset 0 1px 1px rgba(255,255,255,0.18);
-    }
-
-    .command-center:before {
-        content: "";
-
-        position: absolute;
-
-        width: 320px;
-        height: 320px;
-
-        right: -130px;
-        top: -130px;
-
-        border-radius: 50%;
-
-        border: 1px solid rgba(255,255,255,0.12);
-    }
-
-    .command-center:after {
-        content: "";
-
-        position: absolute;
-
-        width: 180px;
-        height: 180px;
-
-        right: 100px;
-        bottom: -120px;
-
-        border-radius: 50%;
-
-        background: rgba(255,255,255,0.05);
-    }
-
-    .command-content {
-        position: relative;
-        z-index: 5;
-        max-width: 800px;
-    }
-
-    .command-tag {
-        display: inline-block;
-
-        padding: 8px 15px;
-
-        border-radius: 999px;
-
-        background: rgba(255,255,255,0.10);
-
-        border: 1px solid rgba(255,255,255,0.16);
-
-        color: #a5f3fc;
-
-        font-size: 10px;
         font-weight: 900;
-        letter-spacing: 1.5px;
+
+        letter-spacing: 1.3px;
     }
 
-    .command-title {
-        margin-top: 20px;
-
-        color: white;
-
-        font-size: 46px;
-        line-height: 1.08;
-
-        font-weight: 950;
-        letter-spacing: -2px;
-    }
-
-    .command-title span {
-        display: block;
-        margin-top: 4px;
-
-        background:
-            linear-gradient(
-                90deg,
-                #67e8f9,
-                #a78bfa,
-                #f0abfc
-            );
-
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
-
-    .command-text {
-        max-width: 690px;
+    .sidebar-section {
 
         margin-top: 18px;
 
-        color: #cbd5e1;
+        margin-bottom: 7px;
 
-        font-size: 15px;
-        line-height: 1.65;
+        color: #a16207;
+
+        font-size: 9px;
+
+        font-weight: 950;
+
+        letter-spacing: 1.5px;
     }
 
+    .sidebar-section.play {
 
-    /* ======================================================
-       FLOATING ICONS
-       ====================================================== */
+        color: #7c3aed;
+    }
 
-    .floating-icon {
-        position: absolute;
-        z-index: 3;
+    .sidebar-section.learn {
 
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        color: #059669;
+    }
 
-        border-radius: 22px;
+    .sidebar-section.account {
 
-        background: rgba(255,255,255,0.10);
+        color: #db2777;
+    }
 
-        border: 1px solid rgba(255,255,255,0.18);
+    .sidebar-footer-card {
 
-        backdrop-filter: blur(12px);
+        margin-top: 18px;
+
+        padding: 15px;
+
+        border-radius: 18px;
+
+        background: rgba(255,255,255,0.85);
+
+        border: 1px solid #e7e5e4;
 
         box-shadow:
-            0 20px 40px rgba(0,0,0,0.20);
+            0 10px 25px
+            rgba(28,25,23,0.05);
     }
 
-    .float-one {
-        width: 78px;
-        height: 78px;
+    .footer-label {
 
-        right: 100px;
-        top: 60px;
-
-        font-size: 36px;
-
-        transform: rotate(9deg);
-    }
-
-    .float-two {
-        width: 60px;
-        height: 60px;
-
-        right: 220px;
-        top: 165px;
-
-        font-size: 27px;
-
-        transform: rotate(-8deg);
-    }
-
-    .float-three {
-        width: 58px;
-        height: 58px;
-
-        right: 55px;
-        bottom: 55px;
-
-        font-size: 26px;
-
-        transform: rotate(-12deg);
-    }
-
-
-    /* ======================================================
-       HERO STATUS
-       ====================================================== */
-
-    .hero-status {
-        position: relative;
-        z-index: 5;
-
-        display: flex;
-
-        gap: 12px;
-
-        margin-top: 28px;
-    }
-
-    .hero-status-card {
-        display: flex;
-
-        align-items: center;
-
-        gap: 10px;
-
-        padding: 11px 15px;
-
-        border-radius: 16px;
-
-        background: rgba(255,255,255,0.09);
-
-        border: 1px solid rgba(255,255,255,0.13);
-    }
-
-    .hero-status-icon {
-        font-size: 21px;
-    }
-
-    .hero-status-label {
-        color: #94a3b8;
+        color: #a8a29e;
 
         font-size: 8px;
 
@@ -382,243 +314,421 @@ st.markdown(
         letter-spacing: 1px;
     }
 
-    .hero-status-value {
-        color: white;
+    .footer-rank {
 
-        font-size: 12px;
+        margin-top: 4px;
 
-        font-weight: 900;
+        color: #7c3aed;
+
+        font-size: 15px;
+
+        font-weight: 950;
     }
 
 
     /* ======================================================
-       LEVEL PANEL
+       TOP BAR
        ====================================================== */
 
-    .level-panel {
-        margin-top: 20px;
+    .topbar {
 
-        padding: 22px 27px;
-
-        border-radius: 24px;
-
-        background: white;
-
-        border: 1px solid #e2e8f0;
-
-        box-shadow:
-            0 15px 35px rgba(15,23,42,0.07);
-
-        display: flex;
-
-        align-items: center;
-
-        gap: 30px;
-    }
-
-    .level-badge {
-        min-width: 65px;
-        height: 65px;
-
-        display: flex;
-
-        align-items: center;
-        justify-content: center;
-
-        border-radius: 50%;
-
-        background:
-            linear-gradient(
-                135deg,
-                #4f46e5,
-                #06b6d4
-            );
-
-        color: white;
-
-        font-size: 19px;
-
-        font-weight: 950;
-
-        box-shadow:
-            0 10px 25px rgba(79,70,229,0.25);
-    }
-
-    .level-info {
-        min-width: 220px;
-    }
-
-    .level-caption {
-        color: #94a3b8;
-
-        font-size: 9px;
-
-        font-weight: 900;
-
-        letter-spacing: 1.3px;
-    }
-
-    .level-name {
-        color: #172554;
-
-        font-size: 19px;
-
-        font-weight: 950;
-    }
-
-    .level-description {
-        color: #64748b;
-
-        font-size: 11px;
-    }
-
-    .level-progress {
-        flex: 1;
-    }
-
-    .level-progress-top {
         display: flex;
 
         justify-content: space-between;
 
-        color: #475569;
+        align-items: center;
+
+        margin-bottom: 20px;
+    }
+
+    .eyebrow {
+
+        color: #7c3aed;
+
+        font-size: 9px;
+
+        font-weight: 950;
+
+        letter-spacing: 1.8px;
+    }
+
+    .top-title {
+
+        margin-top: 4px;
+
+        color: #18181b;
+
+        font-size: 30px;
+
+        font-weight: 950;
+
+        letter-spacing: -1.2px;
+    }
+
+    .top-subtitle {
+
+        margin-top: 3px;
+
+        color: #78716c;
+
+        font-size: 12px;
+    }
+
+
+    /* ======================================================
+       WELCOME CARD
+       ====================================================== */
+
+    .welcome-card {
+
+        position: relative;
+
+        overflow: hidden;
+
+        padding: 34px;
+
+        border-radius: 30px;
+
+        background:
+            radial-gradient(
+                circle at 90% 10%,
+                rgba(251,191,36,0.28),
+                transparent 20%
+            ),
+            radial-gradient(
+                circle at 15% 90%,
+                rgba(236,72,153,0.20),
+                transparent 25%
+            ),
+            linear-gradient(
+                135deg,
+                #4c1d95,
+                #7c3aed 48%,
+                #db2777
+            );
+
+        box-shadow:
+            0 25px 60px
+            rgba(91,33,182,0.20);
+    }
+
+    .welcome-label {
+
+        display: inline-block;
+
+        padding: 7px 12px;
+
+        border-radius: 999px;
+
+        background:
+            rgba(255,255,255,0.14);
+
+        border:
+            1px solid
+            rgba(255,255,255,0.20);
+
+        color: #fef3c7;
+
+        font-size: 8px;
+
+        font-weight: 950;
+
+        letter-spacing: 1.5px;
+    }
+
+    .welcome-title {
+
+        margin-top: 15px;
+
+        color: white;
+
+        font-size: 37px;
+
+        line-height: 1.1;
+
+        font-weight: 950;
+
+        letter-spacing: -1.5px;
+    }
+
+    .welcome-text {
+
+        max-width: 650px;
+
+        margin-top: 10px;
+
+        color: #f5f3ff;
+
+        font-size: 13px;
+
+        line-height: 1.6;
+    }
+
+    .welcome-pill {
+
+        display: inline-block;
+
+        margin-top: 19px;
+
+        padding: 9px 14px;
+
+        border-radius: 12px;
+
+        background:
+            rgba(255,255,255,0.12);
+
+        color: white;
 
         font-size: 10px;
 
-        font-weight: 900;
-
-        margin-bottom: 8px;
-    }
-
-    .progress-track {
-        width: 100%;
-
-        height: 10px;
-
-        border-radius: 999px;
-
-        background: #e2e8f0;
-
-        overflow: hidden;
-    }
-
-    .progress-fill {
-        width: 68%;
-
-        height: 100%;
-
-        border-radius: 999px;
-
-        background:
-            linear-gradient(
-                90deg,
-                #4f46e5,
-                #06b6d4
-            );
-    }
-
-    .level-bottom {
-        display: flex;
-
-        justify-content: space-between;
-
-        color: #94a3b8;
-
-        font-size: 9px;
-
-        margin-top: 6px;
+        font-weight: 850;
     }
 
 
     /* ======================================================
-       SECTION HEADINGS
+       QUICK STATS
        ====================================================== */
 
-    .section-title {
-        margin-top: 32px;
-        margin-bottom: 15px;
+    .stats-area {
 
-        color: #172554;
+        margin-top: 20px;
+    }
+
+    .mini-card {
+
+        min-height: 125px;
+
+        padding: 20px;
+
+        border-radius: 21px;
+
+        background: white;
+
+        border: 1px solid #e7e5e4;
+
+        box-shadow:
+            0 10px 25px
+            rgba(28,25,23,0.05);
+
+        transition: 0.25s ease;
+    }
+
+    .mini-card:hover {
+
+        transform: translateY(-4px);
+
+        box-shadow:
+            0 18px 35px
+            rgba(28,25,23,0.09);
+    }
+
+    .mini-icon {
+
+        font-size: 25px;
+    }
+
+    .mini-number {
+
+        margin-top: 5px;
+
+        color: #18181b;
 
         font-size: 25px;
 
         font-weight: 950;
     }
 
-    .section-subtitle {
-        margin-top: -10px;
+    .mini-label {
 
-        margin-bottom: 17px;
+        color: #78716c;
 
-        color: #94a3b8;
+        font-size: 8px;
 
-        font-size: 12px;
+        font-weight: 950;
 
-        font-weight: 600;
+        letter-spacing: 1px;
+    }
+
+    .mini-description {
+
+        margin-top: 4px;
+
+        color: #a8a29e;
+
+        font-size: 9px;
     }
 
 
     /* ======================================================
-       STAT CARDS
+       LEVEL CARD
        ====================================================== */
 
-    .stat-card {
-        min-height: 150px;
+    .level-card {
 
-        padding: 22px;
+        margin-top: 20px;
+
+        padding: 23px;
 
         border-radius: 23px;
 
         background: white;
 
-        border:
-            1px solid rgba(148,163,184,0.15);
+        border: 1px solid #e7e5e4;
 
         box-shadow:
-            0 12px 30px rgba(15,23,42,0.07);
-
-        transition:
-            transform 0.25s ease,
-            box-shadow 0.25s ease;
+            0 10px 25px
+            rgba(28,25,23,0.05);
     }
 
-    .stat-card:hover {
-        transform: translateY(-5px);
+    .level-top {
 
-        box-shadow:
-            0 20px 40px rgba(79,70,229,0.12);
+        display: flex;
+
+        justify-content: space-between;
+
+        align-items: center;
     }
 
-    .stat-icon {
-        font-size: 27px;
-    }
+    .level-badge {
 
-    .stat-number {
-        margin-top: 6px;
+        display: flex;
 
-        color: #172554;
+        align-items: center;
+        justify-content: center;
 
-        font-size: 28px;
+        width: 55px;
+        height: 55px;
+
+        border-radius: 17px;
+
+        background:
+            linear-gradient(
+                135deg,
+                #f59e0b,
+                #f97316
+            );
+
+        color: white;
+
+        font-size: 16px;
 
         font-weight: 950;
+
+        box-shadow:
+            0 10px 22px
+            rgba(249,115,22,0.20);
     }
 
-    .stat-name {
-        color: #475569;
+    .level-title {
 
-        font-size: 9px;
+        flex: 1;
 
-        font-weight: 900;
+        margin-left: 15px;
+    }
+
+    .level-small {
+
+        color: #a8a29e;
+
+        font-size: 8px;
+
+        font-weight: 950;
 
         letter-spacing: 1px;
     }
 
-    .stat-description {
-        margin-top: 5px;
+    .level-name {
 
-        color: #94a3b8;
+        margin-top: 3px;
 
-        font-size: 10px;
+        color: #18181b;
+
+        font-size: 18px;
+
+        font-weight: 950;
+    }
+
+    .level-xp {
+
+        color: #7c3aed;
+
+        font-size: 11px;
+
+        font-weight: 950;
+    }
+
+    .level-track {
+
+        margin-top: 17px;
+
+        width: 100%;
+
+        height: 10px;
+
+        overflow: hidden;
+
+        border-radius: 999px;
+
+        background: #f1f5f9;
+    }
+
+    .level-fill {
+
+        height: 100%;
+
+        width: 0%;
+
+        border-radius: 999px;
+
+        background:
+            linear-gradient(
+                90deg,
+                #7c3aed,
+                #ec4899,
+                #f59e0b
+            );
+    }
+
+    .level-bottom {
+
+        display: flex;
+
+        justify-content: space-between;
+
+        margin-top: 7px;
+
+        color: #a8a29e;
+
+        font-size: 9px;
+    }
+
+
+    /* ======================================================
+       SECTION
+       ====================================================== */
+
+    .section-heading {
+
+        margin-top: 31px;
+
+        margin-bottom: 5px;
+
+        color: #18181b;
+
+        font-size: 23px;
+
+        font-weight: 950;
+
+        letter-spacing: -0.6px;
+    }
+
+    .section-caption {
+
+        margin-bottom: 16px;
+
+        color: #78716c;
+
+        font-size: 11px;
     }
 
 
@@ -627,21 +737,22 @@ st.markdown(
        ====================================================== */
 
     .mission-card {
-        min-height: 250px;
 
-        margin-bottom: 20px;
+        min-height: 235px;
 
-        padding: 22px;
+        padding: 21px;
 
-        border-radius: 25px;
+        margin-bottom: 17px;
+
+        border-radius: 23px;
 
         background: white;
 
-        border:
-            1px solid rgba(148,163,184,0.14);
+        border: 1px solid #e7e5e4;
 
         box-shadow:
-            0 12px 30px rgba(15,23,42,0.07);
+            0 10px 25px
+            rgba(28,25,23,0.05);
 
         transition:
             transform 0.25s ease,
@@ -649,49 +760,77 @@ st.markdown(
     }
 
     .mission-card:hover {
-        transform: translateY(-7px);
+
+        transform: translateY(-6px);
 
         box-shadow:
-            0 25px 50px rgba(79,70,229,0.14);
+            0 22px 40px
+            rgba(28,25,23,0.10);
     }
 
-    .mission-header {
+    .mission-top {
+
         display: flex;
 
         justify-content: space-between;
 
-        align-items: flex-start;
+        align-items: center;
     }
 
     .mission-icon {
-        width: 58px;
-        height: 58px;
+
+        width: 54px;
+        height: 54px;
 
         display: flex;
 
         align-items: center;
         justify-content: center;
 
-        border-radius: 18px;
+        border-radius: 17px;
 
-        background:
-            linear-gradient(
-                135deg,
-                #eef2ff,
-                #ecfeff
-            );
-
-        font-size: 30px;
+        font-size: 27px;
     }
 
-    .mission-type {
+    .icon-purple {
+
+        background: #f3e8ff;
+    }
+
+    .icon-green {
+
+        background: #d1fae5;
+    }
+
+    .icon-orange {
+
+        background: #ffedd5;
+    }
+
+    .icon-pink {
+
+        background: #fce7f3;
+    }
+
+    .icon-yellow {
+
+        background: #fef3c7;
+    }
+
+    .icon-teal {
+
+        background: #ccfbf1;
+    }
+
+    .mission-tag {
+
         padding: 6px 9px;
 
         border-radius: 999px;
 
-        background: #f1f5f9;
+        background: #fafaf9;
 
-        color: #64748b;
+        color: #78716c;
 
         font-size: 7px;
 
@@ -701,33 +840,73 @@ st.markdown(
     }
 
     .mission-name {
-        margin-top: 17px;
 
-        color: #172554;
+        margin-top: 16px;
 
-        font-size: 18px;
+        color: #18181b;
+
+        font-size: 17px;
 
         font-weight: 950;
     }
 
     .mission-description {
-        min-height: 58px;
 
-        margin-top: 8px;
+        min-height: 55px;
 
-        color: #64748b;
+        margin-top: 7px;
 
-        font-size: 11px;
+        color: #78716c;
+
+        font-size: 10px;
 
         line-height: 1.55;
     }
 
-    .mission-action {
-        margin-top: 15px;
+    .mission-reward {
 
-        color: #4f46e5;
+        margin-top: 12px;
+
+        color: #f59e0b;
 
         font-size: 9px;
+
+        font-weight: 950;
+    }
+
+
+    /* ======================================================
+       OTHER PAGES
+       ====================================================== */
+
+    .page-card {
+
+        padding: 30px;
+
+        border-radius: 25px;
+
+        background: white;
+
+        border: 1px solid #e7e5e4;
+
+        box-shadow:
+            0 12px 30px
+            rgba(28,25,23,0.06);
+    }
+
+    .page-badge {
+
+        display: inline-block;
+
+        padding: 7px 11px;
+
+        border-radius: 999px;
+
+        background: #f3e8ff;
+
+        color: #7c3aed;
+
+        font-size: 8px;
 
         font-weight: 950;
 
@@ -740,24 +919,25 @@ st.markdown(
        ====================================================== */
 
     .stButton > button {
-        min-height: 45px;
 
-        border-radius: 14px;
+        min-height: 44px;
+
+        border-radius: 13px;
 
         border: none;
 
         font-weight: 850;
 
-        transition:
-            transform 0.2s ease,
-            box-shadow 0.2s ease;
+        transition: 0.2s ease;
     }
 
     .stButton > button:hover {
+
         transform: translateY(-2px);
 
         box-shadow:
-            0 8px 20px rgba(79,70,229,0.15);
+            0 8px 20px
+            rgba(124,58,237,0.15);
     }
 
 
@@ -767,26 +947,18 @@ st.markdown(
 
     @media (max-width: 900px) {
 
-        .command-title {
-            font-size: 34px;
+        .welcome-title {
+            font-size: 30px;
         }
 
-        .command-center {
-            padding: 32px 28px;
+        .welcome-card {
+            padding: 27px;
         }
 
-        .floating-icon {
-            display: none;
+        .top-title {
+            font-size: 25px;
         }
 
-        .hero-status {
-            flex-wrap: wrap;
-        }
-
-        .level-panel {
-            flex-direction: column;
-            align-items: flex-start;
-        }
     }
 
     </style>
@@ -804,92 +976,184 @@ with st.sidebar:
     st.html(
         """
         <div class="sidebar-brand">
-            <div class="sidebar-logo">💊</div>
 
-            <div class="sidebar-title">
-                MISSION CONTROL
+            <div class="brand-row">
+
+                <div class="sidebar-logo">
+                    💊
+                </div>
+
+                <div>
+
+                    <div class="sidebar-title">
+                        PHARMAQUEST
+                    </div>
+
+                    <div class="sidebar-subtitle">
+                        PHARMACY LEARNING LAB
+                    </div>
+
+                </div>
+
             </div>
 
-            <div class="sidebar-subtitle">
-                PHARMACY TRAINING HUB
-            </div>
         </div>
         """
     )
 
     st.markdown("---")
 
-    page = st.radio(
-        "SELECT TRAINING MODE",
+    st.html(
+        """
+        <div class="sidebar-section">
+            MAIN
+        </div>
+        """
+    )
+
+    main_page = st.radio(
+        "MAIN",
         [
             "🏠 Home",
+            "📊 My Progress"
+        ],
+        label_visibility="collapsed"
+    )
+
+    st.html(
+        """
+        <div class="sidebar-section play">
+            🎮 PLAY & PRACTICE
+        </div>
+        """
+    )
+
+    play_page = st.radio(
+        "PLAY",
+        [
             "🕵️ Drug Detective",
             "🩺 Patient Case",
             "🗣️ AI Patient",
             "⚔️ Pharma Battle",
             "🔐 Escape Room",
-            "🧬 Build the Patient",
-            "❓ AI Quiz",
-            "🔥 Daily Challenge",
-            "🏆 My Profile"
-        ]
+            "🧬 Build the Patient"
+        ],
+        label_visibility="collapsed"
     )
-
-    st.markdown("---")
 
     st.html(
         """
-        <div style="
-            padding:16px;
-            border-radius:18px;
-            background:white;
-            border:1px solid #e2e8f0;
-            box-shadow:0 8px 20px rgba(15,23,42,0.05);
-        ">
+        <div class="sidebar-section learn">
+            🧠 LEARN
+        </div>
+        """
+    )
 
-            <div style="
-                font-size:9px;
-                color:#94a3b8;
-                font-weight:900;
-                letter-spacing:1px;
-            ">
-                CURRENT RANK
+    learn_page = st.radio(
+        "LEARN",
+        [
+            "❓ AI Quiz",
+            "🔥 Daily Challenge"
+        ],
+        label_visibility="collapsed"
+    )
+
+    st.html(
+        """
+        <div class="sidebar-section account">
+            👤 ACCOUNT
+        </div>
+        """
+    )
+
+    account_page = st.radio(
+        "ACCOUNT",
+        [
+            "🏆 My Profile"
+        ],
+        label_visibility="collapsed"
+    )
+
+
+# ============================================================
+# DETERMINE PAGE
+# ============================================================
+
+if main_page != "🏠 Home":
+
+    page = main_page
+
+elif play_page in [
+    "🕵️ Drug Detective",
+    "🩺 Patient Case",
+    "🗣️ AI Patient",
+    "⚔️ Pharma Battle",
+    "🔐 Escape Room",
+    "🧬 Build the Patient"
+]:
+
+    page = play_page
+
+elif learn_page in [
+    "❓ AI Quiz",
+    "🔥 Daily Challenge"
+]:
+
+    page = learn_page
+
+else:
+
+    page = account_page
+
+
+# ============================================================
+# SIDEBAR STATUS
+# ============================================================
+
+with st.sidebar:
+
+    st.html(
+        f"""
+        <div class="sidebar-footer-card">
+
+            <div class="footer-label">
+                CURRENT JOURNEY
             </div>
 
-            <div style="
-                margin-top:5px;
-                font-size:17px;
-                font-weight:900;
-                color:#312e81;
-            ">
-                🌱 Drug Explorer
+            <div class="footer-rank">
+                🧬 {level_name}
             </div>
 
             <div style="
                 margin-top:10px;
-                height:6px;
-                border-radius:10px;
-                background:#e2e8f0;
-                overflow:hidden;
+                font-size:10px;
+                color:#78716c;
+                font-weight:700;
             ">
-                <div style="
-                    width:68%;
-                    height:100%;
-                    border-radius:10px;
-                    background:linear-gradient(
-                        90deg,
-                        #4f46e5,
-                        #06b6d4
-                    );
-                "></div>
+                ⭐ {st.session_state.xp} XP
             </div>
 
             <div style="
-                margin-top:7px;
-                font-size:10px;
-                color:#64748b;
+                margin-top:8px;
+                height:6px;
+                border-radius:10px;
+                background:#e7e5e4;
+                overflow:hidden;
             ">
-                ⭐ 1,250 / 1,800 XP
+
+                <div style="
+                    width:{progress_percent}%;
+                    height:100%;
+                    border-radius:10px;
+                    background:
+                        linear-gradient(
+                            90deg,
+                            #7c3aed,
+                            #ec4899,
+                            #f59e0b
+                        );
+                "></div>
+
             </div>
 
         </div>
@@ -904,127 +1168,49 @@ with st.sidebar:
 if page == "🏠 Home":
 
     st.html(
-        """
-        <div class="command-center">
+        f"""
+        <div class="topbar">
 
-            <div class="command-content">
+            <div>
 
-                <div class="command-tag">
-                    ⚡ PHARMACY COMMAND CENTER
+                <div class="eyebrow">
+                    PHARMAQUEST • STUDENT COMMAND
                 </div>
 
-                <div class="command-title">
-                    Ready for your next
-                    <span>pharmacy mission?</span>
+                <div class="top-title">
+                    Your Pharmacy Journey
                 </div>
 
-                <div class="command-text">
-                    Train your pharmacy knowledge through challenges,
-                    clinical cases, patient conversations and AI-powered
-                    missions designed to make learning more active.
-                </div>
-
-                <div class="hero-status">
-
-                    <div class="hero-status-card">
-                        <div class="hero-status-icon">🧪</div>
-
-                        <div>
-                            <div class="hero-status-label">
-                                CURRENT RANK
-                            </div>
-
-                            <div class="hero-status-value">
-                                Drug Explorer
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="hero-status-card">
-                        <div class="hero-status-icon">⭐</div>
-
-                        <div>
-                            <div class="hero-status-label">
-                                EXPERIENCE
-                            </div>
-
-                            <div class="hero-status-value">
-                                1,250 XP
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="hero-status-card">
-                        <div class="hero-status-icon">🔥</div>
-
-                        <div>
-                            <div class="hero-status-label">
-                                STREAK
-                            </div>
-
-                            <div class="hero-status-value">
-                                7 Days
-                            </div>
-                        </div>
-                    </div>
-
+                <div class="top-subtitle">
+                    Learn. Practice. Challenge yourself.
                 </div>
 
             </div>
-
-            <div class="floating-icon float-one">💊</div>
-            <div class="floating-icon float-two">🧬</div>
-            <div class="floating-icon float-three">⚕️</div>
 
         </div>
-        """
-    )
 
 
-    # ========================================================
-    # LEVEL
-    # ========================================================
+        <div class="welcome-card">
 
-    st.html(
-        """
-        <div class="level-panel">
-
-            <div class="level-badge">
-                05
+            <div class="welcome-label">
+                🧬 LEVEL {level_number} • {level_name.upper()}
             </div>
 
-            <div class="level-info">
-
-                <div class="level-caption">
-                    CURRENT LEVEL
-                </div>
-
-                <div class="level-name">
-                    Drug Explorer
-                </div>
-
-                <div class="level-description">
-                    550 XP until Clinical Challenger
-                </div>
-
+            <div class="welcome-title">
+                Ready for your next
+                pharmacy challenge?
             </div>
 
-            <div class="level-progress">
+            <div class="welcome-text">
+                Build clinical thinking, medication knowledge
+                and counselling skills through interactive
+                pharmacy missions powered by AI.
+            </div>
 
-                <div class="level-progress-top">
-                    <span>LEVEL PROGRESS</span>
-                    <span>1,250 / 1,800 XP</span>
-                </div>
-
-                <div class="progress-track">
-                    <div class="progress-fill"></div>
-                </div>
-
-                <div class="level-bottom">
-                    <span>⭐ Keep going!</span>
-                    <span>68%</span>
-                </div>
-
+            <div class="welcome-pill">
+                ⭐ {st.session_state.xp} XP
+                &nbsp;&nbsp;•&nbsp;&nbsp;
+                🔥 {st.session_state.streak} day streak
             </div>
 
         </div>
@@ -1033,31 +1219,42 @@ if page == "🏠 Home":
 
 
     # ========================================================
-    # PROGRESS
+    # QUICK STATS
     # ========================================================
-
-    st.html(
-        """
-        <div class="section-title">
-            Your Progress
-        </div>
-
-        <div class="section-subtitle">
-            Build your pharmacy skills one mission at a time.
-        </div>
-        """
-    )
-
 
     c1, c2, c3, c4 = st.columns(4)
 
     stats = [
-        ("🔥", "7", "DAY STREAK", "You're on fire!"),
-        ("🏆", "4", "BADGES", "Keep collecting"),
-        ("🧠", "23", "MISSIONS", "Completed"),
-        ("⚡", "1,250", "TOTAL XP", "Experience earned")
-    ]
 
+        (
+            "⭐",
+            str(st.session_state.xp),
+            "TOTAL XP",
+            "Start earning experience"
+        ),
+
+        (
+            "🔥",
+            str(st.session_state.streak),
+            "DAY STREAK",
+            "Your learning streak"
+        ),
+
+        (
+            "🏆",
+            str(st.session_state.badges),
+            "BADGES",
+            "Achievements unlocked"
+        ),
+
+        (
+            "🧠",
+            str(st.session_state.missions_completed),
+            "MISSIONS",
+            "Completed missions"
+        )
+
+    ]
 
     for col, data in zip(
         [c1, c2, c3, c4],
@@ -1070,21 +1267,21 @@ if page == "🏠 Home":
 
             st.html(
                 f"""
-                <div class="stat-card">
+                <div class="mini-card">
 
-                    <div class="stat-icon">
+                    <div class="mini-icon">
                         {icon}
                     </div>
 
-                    <div class="stat-number">
+                    <div class="mini-number">
                         {number}
                     </div>
 
-                    <div class="stat-name">
+                    <div class="mini-label">
                         {name}
                     </div>
 
-                    <div class="stat-description">
+                    <div class="mini-description">
                         {description}
                     </div>
 
@@ -1094,71 +1291,154 @@ if page == "🏠 Home":
 
 
     # ========================================================
-    # MISSIONS
+    # LEVEL
+    # ========================================================
+
+    st.html(
+        f"""
+        <div class="level-card">
+
+            <div class="level-top">
+
+                <div class="level-badge">
+                    LV {level_number}
+                </div>
+
+                <div class="level-title">
+
+                    <div class="level-small">
+                        CURRENT PHARMA RANK
+                    </div>
+
+                    <div class="level-name">
+                        🧬 {level_name}
+                    </div>
+
+                </div>
+
+                <div class="level-xp">
+                    {st.session_state.xp} / {level_end} XP
+                </div>
+
+            </div>
+
+            <div class="level-track">
+
+                <div
+                    class="level-fill"
+                    style="width:{progress_percent}%;">
+                </div>
+
+            </div>
+
+            <div class="level-bottom">
+
+                <span>
+                    🚀 {xp_to_next} XP until next level
+                </span>
+
+                <span>
+                    {progress_percent}%
+                </span>
+
+            </div>
+
+        </div>
+        """
+    )
+
+
+    # ========================================================
+    # MISSION HUB
     # ========================================================
 
     st.html(
         """
-        <div class="section-title">
-            Choose Your Mission
+        <div class="section-heading">
+            Mission Hub
         </div>
 
-        <div class="section-subtitle">
-            How will you train today?
+        <div class="section-caption">
+            Choose how you want to train today.
         </div>
         """
     )
 
 
     missions = [
+
         (
             "🕵️",
             "Drug Detective",
             "Investigate clues and identify the mystery medicine.",
-            "DEDUCTION"
+            "DEDUCTION",
+            "+50 XP",
+            "icon-purple"
         ),
+
         (
             "🩺",
             "Patient Case",
-            "Think like a clinical pharmacist and solve the case.",
-            "CLINICAL"
+            "Think like a clinical pharmacist and solve a fictional case.",
+            "CLINICAL",
+            "+75 XP",
+            "icon-green"
         ),
+
         (
             "🗣️",
             "AI Patient",
             "Practice counselling with realistic patient personalities.",
-            "COUNSELLING"
+            "COUNSELLING",
+            "+60 XP",
+            "icon-pink"
         ),
+
         (
             "⚔️",
             "Pharma Battle",
-            "Answer rapid-fire questions and test your knowledge.",
-            "BATTLE"
+            "Answer rapid-fire pharmacy questions.",
+            "BATTLE",
+            "+50 XP",
+            "icon-orange"
         ),
+
         (
             "🔐",
             "Escape Room",
-            "Solve the pharmacy mystery before time runs out.",
-            "MYSTERY"
+            "Solve a pharmacy mystery before time runs out.",
+            "MYSTERY",
+            "+100 XP",
+            "icon-purple"
         ),
+
         (
             "🧬",
             "Build the Patient",
-            "Explore how treatment decisions affect a fictional patient.",
-            "SIMULATION"
+            "Explore treatment decisions in a fictional patient.",
+            "SIMULATION",
+            "+100 XP",
+            "icon-teal"
         ),
+
         (
             "❓",
             "AI Quiz",
             "Create a personalized pharmacy quiz with AI.",
-            "KNOWLEDGE"
+            "KNOWLEDGE",
+            "+50 XP",
+            "icon-yellow"
         ),
+
         (
             "🔥",
             "Daily Challenge",
             "Complete today's challenge and earn bonus XP.",
-            "DAILY"
+            "DAILY",
+            "+75 XP",
+            "icon-orange"
         )
+
     ]
 
 
@@ -1167,7 +1447,7 @@ if page == "🏠 Home":
 
     for i, mission in enumerate(missions):
 
-        icon, title, description, category = mission
+        icon, title, description, category, reward, icon_class = mission
 
         with columns[i % 4]:
 
@@ -1175,13 +1455,16 @@ if page == "🏠 Home":
                 f"""
                 <div class="mission-card">
 
-                    <div class="mission-header">
+                    <div class="mission-top">
 
-                        <div class="mission-icon">
+                        <div class="
+                            mission-icon
+                            {icon_class}
+                        ">
                             {icon}
                         </div>
 
-                        <div class="mission-type">
+                        <div class="mission-tag">
                             {category}
                         </div>
 
@@ -1195,8 +1478,8 @@ if page == "🏠 Home":
                         {description}
                     </div>
 
-                    <div class="mission-action">
-                        START MISSION →
+                    <div class="mission-reward">
+                        ⚡ {reward}
                     </div>
 
                 </div>
@@ -1205,22 +1488,154 @@ if page == "🏠 Home":
 
 
 # ============================================================
+# MY PROGRESS
+# ============================================================
+
+elif page == "📊 My Progress":
+
+    st.html(
+        """
+        <div class="topbar">
+
+            <div>
+
+                <div class="eyebrow">
+                    PROGRESSION CENTER
+                </div>
+
+                <div class="top-title">
+                    My Progress
+                </div>
+
+                <div class="top-subtitle">
+                    Your pharmacy learning journey starts here.
+                </div>
+
+            </div>
+
+        </div>
+        """
+    )
+
+    st.html(
+        f"""
+        <div class="page-card">
+
+            <div class="page-badge">
+                LEVEL {level_number}
+            </div>
+
+            <h2>
+                🧬 {level_name}
+            </h2>
+
+            <p>
+                You currently have
+                <strong>{st.session_state.xp} XP</strong>.
+            </p>
+
+            <div class="level-track">
+
+                <div
+                    class="level-fill"
+                    style="width:{progress_percent}%;">
+                </div>
+
+            </div>
+
+            <p style="
+                color:#78716c;
+                font-size:11px;
+                margin-top:8px;
+            ">
+                {xp_to_next} XP remaining until your next level.
+            </p>
+
+        </div>
+        """
+    )
+
+    st.write("")
+
+    p1, p2, p3 = st.columns(3)
+
+    with p1:
+
+        st.metric(
+            "⭐ Total XP",
+            st.session_state.xp
+        )
+
+    with p2:
+
+        st.metric(
+            "🏆 Badges",
+            st.session_state.badges
+        )
+
+    with p3:
+
+        st.metric(
+            "🧠 Missions",
+            st.session_state.missions_completed
+        )
+
+
+# ============================================================
 # DRUG DETECTIVE
 # ============================================================
 
 elif page == "🕵️ Drug Detective":
 
-    st.title("🕵️ Drug Detective")
+    st.html(
+        """
+        <div class="topbar">
 
-    st.write(
-        "Investigate the clues and identify the mystery medicine."
+            <div>
+
+                <div class="eyebrow">
+                    🎮 PLAY & PRACTICE
+                </div>
+
+                <div class="top-title">
+                    🕵️ Drug Detective
+                </div>
+
+                <div class="top-subtitle">
+                    Investigate clues. Think clinically. Identify the medicine.
+                </div>
+
+            </div>
+
+        </div>
+        """
+    )
+
+    st.html(
+        """
+        <div class="page-card">
+
+            <div class="page-badge">
+                +50 XP • DEDUCTION
+            </div>
+
+            <h2>
+                🔎 Open a new case
+            </h2>
+
+            <p>
+                Choose a pharmacy topic and let AI create
+                a mystery case for you.
+            </p>
+
+        </div>
+        """
     )
 
     topic = st.text_input(
-        "Choose a pharmacy topic",
+        "Pharmacy topic",
         placeholder="Example: antibiotics, diabetes, cardiovascular drugs"
     )
-
 
     if st.button("🔎 START INVESTIGATION"):
 
@@ -1260,7 +1675,7 @@ Do not provide personalized medical advice.
             try:
 
                 with st.spinner(
-                    "🧠 Creating your mystery..."
+                    "🧠 Building your mystery..."
                 ):
 
                     response = client.models.generate_content(
@@ -1287,7 +1702,29 @@ Do not provide personalized medical advice.
 
 elif page == "🩺 Patient Case":
 
-    st.title("🩺 Patient Case")
+    st.html(
+        """
+        <div class="topbar">
+
+            <div>
+
+                <div class="eyebrow">
+                    🎮 PLAY & PRACTICE
+                </div>
+
+                <div class="top-title">
+                    🩺 Patient Case
+                </div>
+
+                <div class="top-subtitle">
+                    Think like a clinical pharmacist.
+                </div>
+
+            </div>
+
+        </div>
+        """
+    )
 
     st.info(
         "This is a fictional educational clinical pharmacy simulation."
@@ -1297,7 +1734,6 @@ elif page == "🩺 Patient Case":
         "Choose a condition",
         placeholder="Example: hypertension, asthma, diabetes"
     )
-
 
     if st.button("🩺 GENERATE CASE"):
 
@@ -1359,12 +1795,29 @@ Do not provide personalized medical advice.
 
 elif page == "🗣️ AI Patient":
 
-    st.title("🗣️ AI Patient")
+    st.html(
+        """
+        <div class="topbar">
 
-    st.write(
-        "Practice your pharmacy counselling communication."
+            <div>
+
+                <div class="eyebrow">
+                    🧠 COUNSELLING LAB
+                </div>
+
+                <div class="top-title">
+                    🗣️ AI Patient
+                </div>
+
+                <div class="top-subtitle">
+                    Practice your communication with realistic patient personalities.
+                </div>
+
+            </div>
+
+        </div>
+        """
     )
-
 
     personality = st.selectbox(
         "Patient personality",
@@ -1377,11 +1830,10 @@ elif page == "🗣️ AI Patient":
         ]
     )
 
-
     message = st.text_area(
-        "What would you say to the patient?"
+        "What would you say to the patient?",
+        height=130
     )
-
 
     if st.button("💬 TALK TO PATIENT"):
 
@@ -1447,18 +1899,34 @@ Do not provide medical advice.
 
 elif page == "❓ AI Quiz":
 
-    st.title("❓ AI Pharmacy Quiz")
+    st.html(
+        """
+        <div class="topbar">
 
-    st.write(
-        "Create a personalized pharmacy challenge."
+            <div>
+
+                <div class="eyebrow">
+                    🧠 LEARNING LAB
+                </div>
+
+                <div class="top-title">
+                    ❓ AI Pharmacy Quiz
+                </div>
+
+                <div class="top-subtitle">
+                    Generate a pharmacy challenge around the topic you choose.
+                </div>
+
+            </div>
+
+        </div>
+        """
     )
-
 
     topic = st.text_input(
         "Quiz topic",
-        placeholder="Example: pharmacology of autonomic nervous system"
+        placeholder="Example: autonomic nervous system pharmacology"
     )
-
 
     difficulty = st.selectbox(
         "Difficulty",
@@ -1469,14 +1937,12 @@ elif page == "❓ AI Quiz":
         ]
     )
 
-
     number = st.slider(
         "Number of questions",
         1,
         10,
         5
     )
-
 
     if st.button("🧠 CREATE QUIZ"):
 
@@ -1512,6 +1978,8 @@ D
 At the end give an ANSWER KEY.
 
 Do not give explanations unless requested.
+
+This is an educational quiz.
 """
 
             try:
@@ -1537,57 +2005,130 @@ Do not give explanations unless requested.
 
 
 # ============================================================
-# OTHER MISSIONS
+# COMING SOON MISSIONS
 # ============================================================
 
-else:
-
-    st.title(page)
+elif page in [
+    "⚔️ Pharma Battle",
+    "🔐 Escape Room",
+    "🧬 Build the Patient",
+    "🔥 Daily Challenge"
+]:
 
     st.html(
-        """
-        <div style="
-            padding:35px;
-            margin-top:20px;
-            border-radius:25px;
-            background:white;
-            border:1px solid #e2e8f0;
-            box-shadow:0 15px 35px rgba(15,23,42,0.07);
-            text-align:center;
-        ">
+        f"""
+        <div class="topbar">
+
+            <div>
+
+                <div class="eyebrow">
+                    🚀 PHARMAQUEST ROADMAP
+                </div>
+
+                <div class="top-title">
+                    {page}
+                </div>
+
+                <div class="top-subtitle">
+                    An interactive pharmacy experience is being prepared.
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="page-card" style="text-align:center;">
 
             <div style="
-                font-size:55px;
+                font-size:58px;
             ">
                 🚀
             </div>
 
-            <div style="
-                margin-top:12px;
-                font-size:26px;
-                font-weight:950;
-                color:#172554;
-            ">
+            <h2>
                 Mission Loading
-            </div>
+            </h2>
 
-            <div style="
-                margin-top:8px;
-                color:#64748b;
-                font-size:14px;
+            <p style="
+                color:#78716c;
+                font-size:13px;
             ">
-                This mission is part of the PharmaQuest roadmap.
-                More game mechanics are coming soon.
-            </div>
+                This feature is part of the PharmaQuest roadmap.
+                The mission mechanics will be added next.
+            </p>
 
         </div>
         """
     )
 
-    st.write("")
 
-    st.progress(0.35)
+# ============================================================
+# PROFILE
+# ============================================================
 
-    st.caption(
-        "🚀 PharmaQuest is under active development."
+elif page == "🏆 My Profile":
+
+    st.html(
+        f"""
+        <div class="topbar">
+
+            <div>
+
+                <div class="eyebrow">
+                    👤 STUDENT PROFILE
+                </div>
+
+                <div class="top-title">
+                    My Pharmacy Profile
+                </div>
+
+                <div class="top-subtitle">
+                    Your achievements and learning identity.
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="page-card">
+
+            <div class="page-badge">
+                LEVEL {level_number}
+            </div>
+
+            <h2>
+                🧬 {level_name}
+            </h2>
+
+            <p style="
+                color:#78716c;
+            ">
+                Your PharmaQuest journey is just beginning.
+            </p>
+
+            <div style="
+                margin-top:25px;
+                padding:18px;
+                border-radius:18px;
+                background:#fafaf9;
+                border:1px solid #e7e5e4;
+            ">
+
+                <strong>
+                    ⭐ {st.session_state.xp} XP
+                </strong>
+
+                <br>
+
+                <span style="
+                    color:#78716c;
+                    font-size:11px;
+                ">
+                    Experience earned
+                </span>
+
+            </div>
+
+        </div>
+        """
     )
